@@ -387,7 +387,7 @@ extension MQTTProperties{
     ///
     /// `PUBACK` properties
     ///
-    public var connack:Connack{ .init(self) }
+    public func connack()->Connack{ .init(self.properties) }
     public struct Connack{
         public var sessionExpiryInterval: UInt32?
         public var receiveMaximum: UInt16?
@@ -406,8 +406,8 @@ extension MQTTProperties{
         public var serverReference: String?
         public var authenticationMethod: String?
         public var authenticationData:DataBuffer?
-        init(_ properties:MQTTProperties){
-            properties.properties.forEach { p in
+        init(_ properties:[Property]){
+            properties.forEach { p in
                 switch p {
                 case .sessionExpiryInterval(let uInt32):
                     self.sessionExpiryInterval = uInt32
@@ -458,12 +458,12 @@ extension MQTTProperties{
     ///
     /// `PUBACK` `SUBACK` `PUBREL` `PUBREC` `PUBCOMP` `UNSUBACK` properties
     ///
-    public var ack:ACK{ .init(self) }
+    public func ack()->ACK{ .init(self.properties) }
     public struct ACK{
         public var reasonString: String?
         public var userProperty: [String: String]?
-        init(_ properties:MQTTProperties){
-            properties.properties.forEach { p in
+        init(_ properties:[Property]){
+            properties.forEach { p in
                 switch p{
                 case .reasonString(let str):
                     self.reasonString = str
@@ -484,11 +484,12 @@ extension MQTTProperties{
     ///
     /// `PUBLISH` packet properties
     ///
-    public var publish:Publish{
-        get { .init(self) }
-        set {
-            self.properties = newValue.properties
-        }
+    public func publish()->Publish{ .init(self.properties) }
+    ///
+    /// Create `PUBLISH` properties
+    ///
+    public init(_ publish:Publish){
+        self.properties = publish.properties
     }
     public struct Publish{
         public var payloadFormat: UInt8?
@@ -500,8 +501,8 @@ extension MQTTProperties{
         public var subscriptionIdentifier: Int?
         public var contentType: String?
         public init(){}
-        init(_ properties:MQTTProperties){
-            properties.properties.forEach { p in
+        init(_ properties:[Property]){
+            properties.forEach { p in
                 switch p{
                 case .payloadFormat(let uint):
                     self.payloadFormat = uint
@@ -560,4 +561,148 @@ extension MQTTProperties{
         }
     }
     
+}
+extension MQTTProperties{
+    ///
+    /// `AUTH` packet properties
+    ///
+    public func auth()->Auth{ .init(self.properties) }
+    ///
+    /// Create `AUTH` packet properties
+    ///
+    public init(_ auth:Auth){
+        self.properties = auth.properties
+    }
+    public struct Auth{
+        public var authenticationMethod: String?
+        public var authenticationData: DataBuffer?
+        public var reasonString: String?
+        public var userProperty: [String: String]?
+        public init(){}
+        init(_ properties:[Property]){
+            properties.forEach { p in
+                switch p{
+                case .authenticationData(let buffer):
+                    self.authenticationData = buffer
+                case .authenticationMethod(let str):
+                    self.authenticationMethod = str
+                case .reasonString(let str):
+                    self.reasonString = reasonString
+                case .userProperty(let key, let value):
+                    if self.userProperty == nil {
+                        self.userProperty = [key:value]
+                    }else{
+                        self.userProperty?[key] = value
+                    }
+                default:
+                    break
+                }
+            }
+        }
+        var properties:[Property]{
+            var result = [Property]()
+            if let authenticationMethod{
+                result.append(.authenticationMethod(authenticationMethod))
+            }
+            if let authenticationData{
+                result.append(.authenticationData(authenticationData))
+            }
+            if let reasonString{
+                result.append(.reasonString(reasonString))
+            }
+            if let userProperty{
+                userProperty.forEach { key,value in
+                    result.append(.userProperty(key, value))
+                }
+            }
+            return result
+        }
+    }
+}
+extension MQTTProperties{
+    ///
+    /// `CONNECT` packet properties
+    ///
+    public func auth()->Connect{ .init(self.properties) }
+    ///
+    /// Create `CONNECT` packet properties
+    ///
+    public init(_ auth:Connect){
+        self.properties = auth.properties
+    }
+    public struct Connect{
+        public var sessionExpiryInterval: UInt32?
+        public var receiveMaximum: UInt16?
+        public var maximumPacketSize: UInt32?
+        public var topicAliasMaximum: UInt16?
+        public var requestResponseInformation: UInt8?
+        public var requestProblemInformation: UInt8?
+        public var userProperty: [String: String]?
+        public var authenticationMethod: String?
+        public var authenticationData: DataBuffer?
+        public init(){}
+        init(_ properties:[Property]){
+            properties.forEach { p in
+                switch p{
+                case .sessionExpiryInterval(let uint):
+                    self.sessionExpiryInterval = uint
+                case .receiveMaximum(let uint):
+                    self.receiveMaximum = uint
+                case .maximumPacketSize(let uint):
+                    self.maximumPacketSize = uint
+                case .topicAliasMaximum(let uint):
+                    self.topicAliasMaximum = uint
+                case .requestResponseInformation(let uint):
+                    self.requestResponseInformation = uint
+                case .requestProblemInformation(let uint):
+                    self.requestProblemInformation = uint
+                case .authenticationMethod(let str):
+                    self.authenticationMethod = str
+                case .authenticationData(let buffer):
+                    self.authenticationData = buffer
+                case .userProperty(let key, let value):
+                    if self.userProperty == nil {
+                        self.userProperty = [key:value]
+                    }else{
+                        self.userProperty?[key] = value
+                    }
+                default:
+                    break
+                }
+            }
+        }
+        var properties:[Property]{
+            var result = [Property]()
+            if let authenticationMethod{
+                result.append(.authenticationMethod(authenticationMethod))
+            }
+            if let authenticationData{
+                result.append(.authenticationData(authenticationData))
+            }
+            if let sessionExpiryInterval{
+                result.append(.sessionExpiryInterval(sessionExpiryInterval))
+            }
+            if let maximumPacketSize{
+                result.append(.maximumPacketSize(maximumPacketSize))
+            }
+            if let receiveMaximum{
+                result.append(.receiveMaximum(receiveMaximum))
+            }
+            if let topicAliasMaximum{
+                result.append(.topicAliasMaximum(topicAliasMaximum))
+            }
+            if let requestResponseInformation{
+                result.append(.requestResponseInformation(requestResponseInformation))
+            }
+            if let requestProblemInformation{
+                result.append(.requestProblemInformation(requestProblemInformation))
+            }
+            if let userProperty{
+                userProperty.forEach { key,value in
+                    result.append(.userProperty(key, value))
+                }
+            }
+            return result
+        }
+    }
 }
