@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "swift-promise",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sutext/swift-promise",
+      "state" : {
+        "revision" : "b6215197c07251cbf9e0d192bf03be043e479cfb",
+        "version" : "1.0.0"
+      }
+    }
+  ],
+  "version" : 2
+}
