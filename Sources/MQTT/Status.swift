@@ -92,7 +92,7 @@ import Network
 
 extension MQTT{
     /// state machine
-    public enum Status:Equatable,CustomStringConvertible{
+    public enum Status:Sendable,Equatable,CustomStringConvertible{
         case opened
         case opening
         case closing
@@ -143,7 +143,7 @@ extension MQTT{
        case wildcardSubscriptionsNotSupported = 0xA2
    }
     /// WehSocket close reason
-    public enum CloseReason:Equatable,CustomStringConvertible{
+    public enum CloseReason:Sendable,Equatable,CustomStringConvertible{
         /// close when ping pong fail
         case pinging
         /// auto close by network monitor when network unsatisfied

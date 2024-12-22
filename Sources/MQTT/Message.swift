@@ -10,7 +10,7 @@ import Foundation
 
 /// MQTT Message
 extension MQTT{
-    public class Message: NSObject {
+    public class Message: NSObject, @unchecked Sendable {
         public var qos = MQTTQos.qos1
         public var topic: String
         public var payload: [UInt8]

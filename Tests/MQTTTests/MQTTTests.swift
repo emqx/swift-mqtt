@@ -11,8 +11,8 @@ class MQTTClient{
         self.mqtt = MQTT("swift-mqtt", endpoint: endpoint, params: .tcp)
         self.mqtt.username = "jagat-mqtt-pwd-im"
         self.mqtt.password = "jagat-mqtt-pwd-im"
-        self.mqtt.logLevel = .debug
         self.mqtt.delegate = self
+        MQTT.logLevel = .debug
     }
     func connect(){
         self.mqtt.open()

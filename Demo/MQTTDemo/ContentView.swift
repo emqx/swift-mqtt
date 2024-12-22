@@ -29,7 +29,6 @@ struct ContentView: View {
 
             }
             Button("测试"){
-                mqtt.test()
             }
         }
     }

@@ -43,6 +43,13 @@ enum MQTTSerializer {
         byteBuffer.writeInteger(UInt16(length))
         byteBuffer.writeString(string)
     }
+    /// read string from bytebuffer
+    static func readString(from byteBuffer: inout DataBuffer) throws -> String {
+        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
+        guard let string = byteBuffer.readString(length: Int(length)) else { throw MQTTError.badResponse }
+        return string
+    }
+    
     /// write buffer to byte buffer
     static func writeBuffer(_ buffer: DataBuffer, to byteBuffer: inout DataBuffer) throws {
         let length = buffer.readableBytes
@@ -51,6 +58,26 @@ enum MQTTSerializer {
         byteBuffer.writeInteger(UInt16(length))
         byteBuffer.writeBuffer(&buffer)
     }
+    /// read data from bytebuffer
+    static func readBuffer(from byteBuffer: inout DataBuffer) throws -> DataBuffer {
+        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
+        guard let buffer = byteBuffer.readBuffer(length: Int(length)) else { throw MQTTError.badResponse }
+        return buffer
+    }
+    
+    /// write data
+    static func writeData(_ data: Data, to byteBuffer: inout DataBuffer) throws {
+        guard data.count < 65536 else { throw MQTTPacketError.badParameter }
+        byteBuffer.writeInteger(UInt16(data.count))
+        byteBuffer.writeData(data)
+    }
+    /// read data from bytebuffer
+    static func readData(from byteBuffer: inout DataBuffer) throws -> Data {
+        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
+        guard let data = byteBuffer.readData(length: Int(length)) else { throw MQTTError.badResponse }
+        return data
+    }
+    
     /// read variable length from bytebuffer
     static func readVariableLengthInteger(from byteBuffer: inout DataBuffer) throws -> Int {
         var value = 0
@@ -65,16 +92,6 @@ enum MQTTSerializer {
         } while true
         return value
     }
-    /// read string from bytebuffer
-    static func readString(from byteBuffer: inout DataBuffer) throws -> String {
-        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
-        guard let string = byteBuffer.readString(length: Int(length)) else { throw MQTTError.badResponse }
-        return string
-    }
-    /// read slice from bytebuffer
-    static func readBuffer(from byteBuffer: inout DataBuffer) throws -> DataBuffer {
-        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
-        guard let buffer = byteBuffer.readSlice(length: Int(length)) else { throw MQTTError.badResponse }
-        return buffer
-    }
+    
+    
 }

@@ -15,10 +15,6 @@ import Foundation
 
 /// Array of inflight packets. Used to resend packets when reconnecting to server
 struct MQTTInflight {
-    init() {
-        self.packets = []
-    }
-
     /// add packet
     mutating func add(packet: MQTTPacket) {
         self.lock.withLock {
@@ -42,5 +38,5 @@ struct MQTTInflight {
     }
 
     private let lock: NSLock = NSLock()
-    private(set) var packets: Array<MQTTPacket>
+    private(set) var packets: Array<MQTTPacket> = []
 }

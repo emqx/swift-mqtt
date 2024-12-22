@@ -47,13 +47,14 @@ public protocol MQTTDelegate:AnyObject {
     func mqttDidReceivePong(_ mqtt: MQTT)
 }
 
-open class MQTT{
+public final class MQTT:@unchecked Sendable{
+    public typealias ONFinish = @Sendable (NWError?)->Void
     private let endpoint:NWEndpoint
     private let params:NWParameters
     private let lock:NSLock = NSLock()
     internal let queue:DispatchQueue
     private let version:Version = .v5_0
-    private let deliver = Deliver()
+//    private let deliver = Deliver()
     
     private var publishCallbacks:[UInt16:Promise<MQTTAckV5>] = [:]
     private var subscribeCallbackss:[UInt16:Promise<MQTTSubackV5>] = [:]
@@ -70,34 +71,36 @@ open class MQTT{
     private var unsubscriptionsWaitingAck: [UInt16:[Subscription]] = [:]
     private var sendingMessages: [UInt16: Message] = [:]
     private var _msgid: UInt16 = 0
-    public var clientID: String
+    public var identifier: String
     public var username: String?
     public var password: String?
     public var cleanSession = true
     /// Setup a **Last Will Message** to client before connecting to broker
     public var willMessage: Message?
     public weak var delegate: MQTTDelegate?
+
+    nonisolated(unsafe) static var logger:Logger = .init(minLevel: .warning)
     
-    public class var logLevel:Logger.Level {
-        get { Logger.minLevel }
-        set { Logger.minLevel = newValue}
+    public class var logLevel:Logger.Level{
+        get {logger.minLevel}
+        set {logger = .init(minLevel: newValue)}
     }
-    /// Re-deliver the un-acked messages
-    public var deliverTimeout: Double {
-        get { return deliver.retryTimeInterval }
-        set { deliver.retryTimeInterval = newValue }
-    }
-    /// Message queue size. default 1000
-    /// The new publishing messages of Qos1/Qos2 will be drop, if the queue is full
-    public var messageQueueSize: UInt {
-        get { return deliver.mqueueSize }
-        set { deliver.mqueueSize = newValue }
-    }
-    /// In-flight window size. default 10
-    public var inflightWindowSize: UInt {
-        get { return deliver.inflightWindowSize }
-        set { deliver.inflightWindowSize = newValue }
-    }
+//    /// Re-deliver the un-acked messages
+//    public var deliverTimeout: Double {
+//        get { return deliver.retryTimeInterval }
+//        set { deliver.retryTimeInterval = newValue }
+//    }
+//    /// Message queue size. default 1000
+//    /// The new publishing messages of Qos1/Qos2 will be drop, if the queue is full
+//    public var messageQueueSize: UInt {
+//        get { return deliver.mqueueSize }
+//        set { deliver.mqueueSize = newValue }
+//    }
+//    /// In-flight window size. default 10
+//    public var inflightWindowSize: UInt {
+//        get { return deliver.inflightWindowSize }
+//        set { deliver.inflightWindowSize = newValue }
+//    }
     /// Keep alive time interval
     public var keepAlive: UInt16 = 60{
         didSet{
@@ -136,11 +139,11 @@ open class MQTT{
     ///   - host: The MQTT broker host domain or IP address. Default is "localhost"
     ///   - port: The MQTT service port of host. Default is 1883
     public init(_ clientID: String, endpoint:NWEndpoint,params:NWParameters = .tls) {
-        self.clientID = clientID
+        self.identifier = clientID
         self.endpoint = endpoint
         self.params = params
         self.queue = DispatchQueue.init(label: "swift.mqtt.queue")
-        deliver.delegate = self
+//        deliver.delegate = self
         if let storage = Storage() {
             storage.setMQTTVersion("5.0")
         } else {
@@ -196,21 +199,21 @@ extension MQTT{
 //            }
 //        }
     }
-    internal func send(_ frame: Frame,timeout:UInt64 = 5000, finish:((NWError?)->Void)? = nil) {
+    internal func send(_ frame: Frame,timeout:UInt64 = 5000, finish:ONFinish? = nil) {
         Logger.debug("SEND: \(frame)")
         let data = frame.bytes(version: version.string)
         self.send(data: data, finish: finish)
     }
-    internal func send(_ packet: MQTTPacket,timeout:UInt64 = 5000, finish:((NWError?)->Void)? = nil) {
+    internal func send(_ packet: MQTTPacket,timeout:UInt64 = 5000, finish:ONFinish? = nil) {
         Logger.debug("SEND: \(packet)")
         var buffer = DataBuffer()
         try? packet.write(version: version, to: &buffer)
         self.send(data: buffer.data, finish: finish)
     }
-    private func send(data:[UInt8],timeout:UInt64 = 5000,finish:((NWError?)->Void)? = nil){
+    private func send(data:[UInt8],timeout:UInt64 = 5000,finish:ONFinish? = nil){
         self.send(data: Data(bytes: data, count: data.count),finish: finish)
     }
-    private func send(data:Data,timeout:UInt64 = 5000,finish:((NWError?)->Void)? = nil){
+    private func send(data:Data,timeout:UInt64 = 5000,finish:ONFinish? = nil){
         guard let conn else{
             return
         }
@@ -290,20 +293,14 @@ extension MQTT{
 extension MQTT {
     
     @discardableResult
-    public func publish(_ topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, dup:Bool = false, retain:Bool = false,properties:MQTTProperties = [])->Promise<MQTTAckV5>{
-        var buffer = DataBuffer()
-        buffer.writeString(payload)
-        let info = MQTTPublishInfo(qos: qos, retain: retain,dup: dup, topicName: topic, payload: buffer, properties: properties)
-        let packet = MQTTPublishPacket(publish: info, packetId: nextMessageID())
-        self.send(packet)
-        let promise = Promise<MQTTAckV5>.init()
-        self.publishCallbacks[packet.packetId] = promise
-        return promise
+    public func publish(_ topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, dup:Bool = false, retain:Bool = false,properties:Properties = [])->Promise<MQTTAckV5>{
+        let data = payload.data(using: .utf8) ?? Data()
+        return self.publish(topic, payload: data,qos: qos,dup: dup,retain: retain,properties: properties)
     }
     
     @discardableResult
-    public func publish(_ topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, dup:Bool = false, retain:Bool = false,properties:MQTTProperties = []) ->Promise<MQTTAckV5> {
-        let info = MQTTPublishInfo(qos: qos, retain: retain,dup: dup, topicName: topic, payload: .init(data: payload), properties: properties)
+    public func publish(_ topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, dup:Bool = false, retain:Bool = false,properties:Properties = []) ->Promise<MQTTAckV5> {
+        let info = MQTTPublishInfo(qos: qos, retain: retain,dup: dup, topicName: topic, payload: payload, properties: properties)
         let packet = MQTTPublishPacket(publish: info, packetId: nextMessageID())
         self.send(packet)
         let promise = Promise<MQTTAckV5>.init()
@@ -311,30 +308,25 @@ extension MQTT {
         self.send(packet)
         return promise
     }
-    
-    public func subscribe(_ topic:String,qos:MQTTQoS = .atLeastOnce,properties:MQTTProperties = [])->Promise<MQTTSubackV5>{
+    @discardableResult
+    public func subscribe(_ topic:String,qos:MQTTQoS = .atLeastOnce,properties:Properties = [])->Promise<MQTTSubackV5>{
         let info = MQTTSubscribeInfoV5(topicFilter: topic, qos: qos)
-        let packet = MQTTSubscribePacket(subscriptions: [info], properties: properties, packetId: nextMessageID())
-        let promise = Promise<MQTTSubackV5>.init()
-        self.subscribeCallbackss[packet.packetId] = promise
-        self.send(packet)
-        return promise
+        return self.subscribe([info], properties: properties)
     }
-    public func subscribe(_ topics:[MQTTSubscribeInfoV5],properties:MQTTProperties = [])->Promise<MQTTSubackV5>{
+    @discardableResult
+    public func subscribe(_ topics:[MQTTSubscribeInfoV5],properties:Properties = [])->Promise<MQTTSubackV5>{
         let packet = MQTTSubscribePacket(subscriptions: topics, properties: properties, packetId: nextMessageID())
         let promise = Promise<MQTTSubackV5>.init()
         self.subscribeCallbackss[packet.packetId] = promise
         self.send(packet)
         return promise
     }
-    public func unsubscribe(_ topic:String,properties:MQTTProperties = []) -> Promise<MQTTSubackV5> {
-        let packet = MQTTUnsubscribePacket(subscriptions: [topic], properties: properties, packetId: nextMessageID())
-        let promise = Promise<MQTTSubackV5>.init()
-        self.subscribeCallbackss[packet.packetId] = promise
-        self.send(packet)
-        return promise
+    @discardableResult
+    public func unsubscribe(_ topic:String,properties:Properties = []) -> Promise<MQTTSubackV5> {
+        return self.unsubscribe(topic, properties: properties)
     }
-    public func unsubscribe(_ topics:[String],properties:MQTTProperties = []) -> Promise<MQTTSubackV5> {
+    @discardableResult
+    public func unsubscribe(_ topics:[String],properties:Properties = []) -> Promise<MQTTSubackV5> {
         let packet = MQTTUnsubscribePacket(subscriptions: topics, properties: properties, packetId: nextMessageID())
         let promise = Promise<MQTTSubackV5>.init()
         self.subscribeCallbackss[packet.packetId] = promise
@@ -394,12 +386,12 @@ extension MQTT {
             self.sendingMessages[msgid] = message
         }
         // Push frame to deliver message queue
-        guard deliver.add(frame) else {
-            queue.async {
-                self.sendingMessages.removeValue(forKey: msgid)
-            }
-            return -1
-        }
+//        guard deliver.add(frame) else {
+//            queue.async {
+//                self.sendingMessages.removeValue(forKey: msgid)
+//            }
+//            return -1
+//        }
 
         return Int(msgid)
     }
@@ -472,7 +464,7 @@ extension MQTT {
         return _msgid
     }
     private func connectFrame()->Connect{
-        var connect = Connect(clientID: clientID)
+        var connect = Connect(clientID: identifier)
         connect.keepAlive = keepAlive
         connect.username = username
         connect.password = password
@@ -482,7 +474,7 @@ extension MQTT {
         return connect
     }
     private func connectPacket()->MQTTConnectPacket{
-        return MQTTConnectPacket.init(cleanSession: cleanSession, keepAliveSeconds: keepAlive, clientIdentifier: clientID, userName: username, password: password, properties: [], will: nil)
+        return MQTTConnectPacket.init(cleanSession: cleanSession, keepAliveSeconds: keepAlive, clientId: identifier, username: username, password: password, properties: [], will: nil)
     }
     private func puback(_ type: FrameType, msgid: UInt16) {
         switch type {
@@ -583,32 +575,48 @@ extension MQTT{
     }
 }
 
-
-// MARK: DeliverProtocol
-extension MQTT: DeliverProtocol {
-    func deliver(_ deliver: Deliver, wantToSend frame: Frame) {
-        if let publish = frame as? Publish {
-            let msgid = publish.msgid
-            var message: Message? = nil
-                        
-            if let sendingMessage = sendingMessages[msgid] {
-                message = sendingMessage
-                //Logger.error("Want send \(frame), but not found in CocoaMQTT cache")
-            } else {
-                message = Message(topic: publish.topic, payload: publish.payload())
-            }
-            
-            send(publish)
-            
-            if let message = message {
-                self.delegate?.mqtt(self, didPublishMessage: message, id: msgid)
-            }
-        } else if let pubrel = frame as? Pubrel {
-            // -- Send PUBREL
-            send(pubrel)
-        }
+extension MQTT{
+    public struct Config{
+        /// Version of MQTT server client is connecting to
+        public let version: Version
+        /// MQTT keep alive period.
+        public let keepAlive: TimeInterval
+        /// timeout for connecting to server
+        public let connectTimeout: TimeInterval
+        /// timeout for server response
+        public let timeout: TimeInterval?
+        /// MQTT user name.
+        public let username: String?
+        /// MQTT password.
+        public let password: String?
     }
 }
+
+//// MARK: DeliverProtocol
+//extension MQTT: DeliverProtocol {
+//    func deliver(_ deliver: Deliver, wantToSend frame: Frame) {
+//        if let publish = frame as? Publish {
+//            let msgid = publish.msgid
+//            var message: Message? = nil
+//                        
+//            if let sendingMessage = sendingMessages[msgid] {
+//                message = sendingMessage
+//                //Logger.error("Want send \(frame), but not found in CocoaMQTT cache")
+//            } else {
+//                message = Message(topic: publish.topic, payload: publish.payload())
+//            }
+//            
+//            send(publish)
+//            
+//            if let message = message {
+//                self.delegate?.mqtt(self, didPublishMessage: message, id: msgid)
+//            }
+//        } else if let pubrel = frame as? Pubrel {
+//            // -- Send PUBREL
+//            send(pubrel)
+//        }
+//    }
+//}
 extension MQTT: PacketReaderDelegate{
     func readCompleted(_ reader: PacketReader) {
         
@@ -626,12 +634,12 @@ extension MQTT: PacketReaderDelegate{
             let connack = packet as! MQTTConnAckPacket
             if connack.returnCode == 0 {
                 if cleanSession {
-                    deliver.cleanAll()
+//                    deliver.cleanAll()
                 } else {
-                    if let storage = Storage(by: clientID) {
-                        deliver.recoverSessionBy(storage)
+                    if let storage = Storage(by: identifier) {
+//                        deliver.recoverSessionBy(storage)
                     } else {
-                        Logger.warning("Localstorage initial failed for key: \(clientID)")
+                        Logger.warning("Localstorage initial failed for key: \(identifier)")
                     }
                 }
                 self.status = .opened
@@ -661,114 +669,114 @@ extension MQTT: PacketReaderDelegate{
         }
     }
 }
-// MARK: - ReaderDelegate
-extension MQTT: ReaderDelegate {
-    func readCompleted(_ reader: Reader) {
-        self.directClose()
-    }
-    func reader(_ reader: Reader, didReceive error: Reader.Error) {
-        Logger.debug("RECV: \(error)")
-    }
-    func reader(_ reader: Reader, didReceive disconnect: Disconnect) {
-        Logger.debug("RECV: \(disconnect)")
-//        self.tryClose(code: disconnect.receiveReasonCode ?? .normalDisconnection, reason: .server)
-    }
-    func reader(_ reader: Reader, didReceive auth: Auth) {
-        Logger.debug("RECV: \(auth)")
-        delegate?.mqtt(self, didReceiveAuthReasonCode: auth.receiveReasonCode!)
-    }
-    func reader(_ reader: Reader, didReceive connack: Connack) {
-        Logger.debug("RECV: \(connack)")
-        if connack.reasonCode == .success {
-            if cleanSession {
-                deliver.cleanAll()
-            } else {
-                if let storage = Storage(by: clientID) {
-                    deliver.recoverSessionBy(storage)
-                } else {
-                    Logger.warning("Localstorage initial failed for key: \(clientID)")
-                }
-            }
-            self.status = .opened
-        } else {
-            self.close()
-        }
-        delegate?.mqtt(self, didConnectAck: connack.reasonCode ?? ConnAckReasonCode.unspecifiedError, connAckData: connack.connackProperties ?? nil)
-    }
-    func reader(_ reader: Reader, didReceive publish: Publish) {
-        Logger.debug("RECV: \(publish)")
-        let message = Message(topic: publish.mqtt5Topic, payload: publish.payload5(), qos: publish.qos, retained: publish.retained)
-        message.duplicated = publish.dup
-        Logger.info("Received message: \(message)")
-        delegate?.mqtt(self, didReceiveMessage: message, id: publish.msgid,  publishData: publish.publishRecProperties ?? nil)
-        if message.qos == .qos1 {
-            puback(FrameType.puback, msgid: publish.msgid)
-        } else if message.qos == .qos2 {
-            puback(FrameType.pubrec, msgid: publish.msgid)
-        }
-    }
-    func reader(_ reader: Reader, didReceive puback: Puback) {
-        Logger.debug("RECV: \(puback)")
-        deliver.ack(by: puback)
-        delegate?.mqtt(self, didPublishAck: puback.msgid, pubAckData: puback.pubAckProperties ?? nil)
-    }
-    func reader(_ reader: Reader, didReceive pubrec: Pubrec) {
-        Logger.debug("RECV: \(pubrec)")
-        deliver.ack(by: pubrec)
-        delegate?.mqtt(self, didPublishRec: pubrec.msgid, pubRecData: pubrec.pubRecProperties ?? nil)
-    }
-    func reader(_ reader: Reader, didReceive pubrel: Pubrel) {
-        Logger.debug("RECV: \(pubrel)")
-        puback(FrameType.pubcomp, msgid: pubrel.msgid)
-    }
-    func reader(_ reader: Reader, didReceive pubcomp: Pubcomp) {
-        Logger.debug("RECV: \(pubcomp)")
-        deliver.ack(by: pubcomp)
-        delegate?.mqtt(self, didPublishComplete: pubcomp.msgid, pubCompData: pubcomp.pubCompProperties ?? nil)
-    }
-    func reader(_ reader: Reader, didReceive suback: Suback) {
-        Logger.debug("RECV: \(suback)")
-        guard let topicsAndQos = subscriptionsWaitingAck.removeValue(forKey: suback.msgid) else {
-            Logger.warning("UNEXPECT SUBACK Received: \(suback)")
-            return
-        }
-
-        guard topicsAndQos.count == suback.grantedQos.count else {
-            Logger.warning("UNEXPECT SUBACK Recivied: \(suback)")
-            return
-        }
-
-        let success: NSMutableDictionary = NSMutableDictionary()
-        var failed = [String]()
-        for (idx,subscriptionList) in topicsAndQos.enumerated() {
-            if suback.grantedQos[idx] != .FAILURE {
-                subscriptions[subscriptionList.topic] = suback.grantedQos[idx]
-                success[subscriptionList.topic] = suback.grantedQos[idx].rawValue
-            } else {
-                failed.append(subscriptionList.topic)
-            }
-        }
-
-        delegate?.mqtt(self, didSubscribeTopics: success, failed: failed, subAckData: suback.subAckProperties ?? nil)
-    }
-    func reader(_ reader: Reader, didReceive unsuback: Unsuback) {
-        Logger.debug("RECV: \(unsuback)")
-        guard let topics = unsubscriptionsWaitingAck.removeValue(forKey: unsuback.msgid) else {
-            Logger.warning("UNEXPECT UNSUBACK Received: \(unsuback.msgid)")
-            return
-        }
-        // Remove local subscription
-        var removeTopics : [String] = []
-        for t in topics {
-            removeTopics.append(t.topic)
-            subscriptions.removeValue(forKey: t.topic)
-        }
-        delegate?.mqtt(self, didUnsubscribeTopics: removeTopics, unsubAckData: unsuback.unSubAckProperties ?? nil)
-    }
-    func reader(_ reader: Reader, didReceive pingresp: Pong) {
-        Logger.debug("RECV: \(pingresp)")
-        self.pinging?.onPong()
-        delegate?.mqttDidReceivePong(self)
-    }
-}
+//// MARK: - ReaderDelegate
+//extension MQTT: ReaderDelegate {
+//    func readCompleted(_ reader: Reader) {
+//        self.directClose()
+//    }
+//    func reader(_ reader: Reader, didReceive error: Reader.Error) {
+//        Logger.debug("RECV: \(error)")
+//    }
+//    func reader(_ reader: Reader, didReceive disconnect: Disconnect) {
+//        Logger.debug("RECV: \(disconnect)")
+////        self.tryClose(code: disconnect.receiveReasonCode ?? .normalDisconnection, reason: .server)
+//    }
+//    func reader(_ reader: Reader, didReceive auth: Auth) {
+//        Logger.debug("RECV: \(auth)")
+//        delegate?.mqtt(self, didReceiveAuthReasonCode: auth.receiveReasonCode!)
+//    }
+//    func reader(_ reader: Reader, didReceive connack: Connack) {
+//        Logger.debug("RECV: \(connack)")
+//        if connack.reasonCode == .success {
+//            if cleanSession {
+//                deliver.cleanAll()
+//            } else {
+//                if let storage = Storage(by: clientID) {
+//                    deliver.recoverSessionBy(storage)
+//                } else {
+//                    Logger.warning("Localstorage initial failed for key: \(clientID)")
+//                }
+//            }
+//            self.status = .opened
+//        } else {
+//            self.close()
+//        }
+//        delegate?.mqtt(self, didConnectAck: connack.reasonCode ?? ConnAckReasonCode.unspecifiedError, connAckData: connack.connackProperties ?? nil)
+//    }
+//    func reader(_ reader: Reader, didReceive publish: Publish) {
+//        Logger.debug("RECV: \(publish)")
+//        let message = Message(topic: publish.mqtt5Topic, payload: publish.payload5(), qos: publish.qos, retained: publish.retained)
+//        message.duplicated = publish.dup
+//        Logger.info("Received message: \(message)")
+//        delegate?.mqtt(self, didReceiveMessage: message, id: publish.msgid,  publishData: publish.publishRecProperties ?? nil)
+//        if message.qos == .qos1 {
+//            puback(FrameType.puback, msgid: publish.msgid)
+//        } else if message.qos == .qos2 {
+//            puback(FrameType.pubrec, msgid: publish.msgid)
+//        }
+//    }
+//    func reader(_ reader: Reader, didReceive puback: Puback) {
+//        Logger.debug("RECV: \(puback)")
+//        deliver.ack(by: puback)
+//        delegate?.mqtt(self, didPublishAck: puback.msgid, pubAckData: puback.pubAckProperties ?? nil)
+//    }
+//    func reader(_ reader: Reader, didReceive pubrec: Pubrec) {
+//        Logger.debug("RECV: \(pubrec)")
+//        deliver.ack(by: pubrec)
+//        delegate?.mqtt(self, didPublishRec: pubrec.msgid, pubRecData: pubrec.pubRecProperties ?? nil)
+//    }
+//    func reader(_ reader: Reader, didReceive pubrel: Pubrel) {
+//        Logger.debug("RECV: \(pubrel)")
+//        puback(FrameType.pubcomp, msgid: pubrel.msgid)
+//    }
+//    func reader(_ reader: Reader, didReceive pubcomp: Pubcomp) {
+//        Logger.debug("RECV: \(pubcomp)")
+//        deliver.ack(by: pubcomp)
+//        delegate?.mqtt(self, didPublishComplete: pubcomp.msgid, pubCompData: pubcomp.pubCompProperties ?? nil)
+//    }
+//    func reader(_ reader: Reader, didReceive suback: Suback) {
+//        Logger.debug("RECV: \(suback)")
+//        guard let topicsAndQos = subscriptionsWaitingAck.removeValue(forKey: suback.msgid) else {
+//            Logger.warning("UNEXPECT SUBACK Received: \(suback)")
+//            return
+//        }
+//
+//        guard topicsAndQos.count == suback.grantedQos.count else {
+//            Logger.warning("UNEXPECT SUBACK Recivied: \(suback)")
+//            return
+//        }
+//
+//        let success: NSMutableDictionary = NSMutableDictionary()
+//        var failed = [String]()
+//        for (idx,subscriptionList) in topicsAndQos.enumerated() {
+//            if suback.grantedQos[idx] != .FAILURE {
+//                subscriptions[subscriptionList.topic] = suback.grantedQos[idx]
+//                success[subscriptionList.topic] = suback.grantedQos[idx].rawValue
+//            } else {
+//                failed.append(subscriptionList.topic)
+//            }
+//        }
+//
+//        delegate?.mqtt(self, didSubscribeTopics: success, failed: failed, subAckData: suback.subAckProperties ?? nil)
+//    }
+//    func reader(_ reader: Reader, didReceive unsuback: Unsuback) {
+//        Logger.debug("RECV: \(unsuback)")
+//        guard let topics = unsubscriptionsWaitingAck.removeValue(forKey: unsuback.msgid) else {
+//            Logger.warning("UNEXPECT UNSUBACK Received: \(unsuback.msgid)")
+//            return
+//        }
+//        // Remove local subscription
+//        var removeTopics : [String] = []
+//        for t in topics {
+//            removeTopics.append(t.topic)
+//            subscriptions.removeValue(forKey: t.topic)
+//        }
+//        delegate?.mqtt(self, didUnsubscribeTopics: removeTopics, unsubAckData: unsuback.unSubAckProperties ?? nil)
+//    }
+//    func reader(_ reader: Reader, didReceive pingresp: Pong) {
+//        Logger.debug("RECV: \(pingresp)")
+//        self.pinging?.onPong()
+//        delegate?.mqttDidReceivePong(self)
+//    }
+//}
 

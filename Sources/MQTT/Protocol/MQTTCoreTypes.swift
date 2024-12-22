@@ -71,12 +71,12 @@ public struct MQTTPublishInfo: Sendable {
     public let topicName: String
 
     /// MQTT v5 properties
-    public let properties: MQTTProperties
+    public let properties: Properties
 
     /// Message payload.
-    public let payload: DataBuffer
+    public let payload: Data
 
-    public init(qos: MQTTQoS, retain: Bool, dup: Bool = false, topicName: String, payload: DataBuffer, properties: MQTTProperties) {
+    public init(qos: MQTTQoS, retain: Bool, dup: Bool = false, topicName: String, payload: Data, properties: Properties) {
         self.qos = qos
         self.retain = retain
         self.dup = dup
@@ -84,8 +84,6 @@ public struct MQTTPublishInfo: Sendable {
         self.payload = payload
         self.properties = properties
     }
-
-//    static let emptyByteBuffer = ByteBufferAllocator().buffer(capacity: 0)
 }
 
 /// MQTT SUBSCRIBE packet parameters.
@@ -129,7 +127,7 @@ public struct MQTTConnackV5: Sendable {
     /// connect reason code
     public let reason: MQTTReasonCode
     /// properties
-    public let properties: MQTTProperties
+    public let properties: Properties
 }
 
 /// MQTT v5 ACK information. Returned with PUBACK, PUBREL
@@ -137,9 +135,9 @@ public struct MQTTAckV5: Sendable {
     /// MQTT v5 reason code
     public let reason: MQTTReasonCode
     /// MQTT v5 properties
-    public let properties: MQTTProperties
+    public let properties: Properties
 
-    init(reason: MQTTReasonCode = .success, properties: MQTTProperties = .init()) {
+    init(reason: MQTTReasonCode = .success, properties: Properties = .init()) {
         self.reason = reason
         self.properties = properties
     }
@@ -194,9 +192,9 @@ public struct MQTTSubackV5: Sendable {
     /// MQTT v5 subscription reason code
     public let reasons: [MQTTReasonCode]
     /// MQTT v5 properties
-    public let properties: MQTTProperties
+    public let properties: Properties
 
-    init(reasons: [MQTTReasonCode], properties: MQTTProperties = .init()) {
+    init(reasons: [MQTTReasonCode], properties: Properties = .init()) {
         self.reasons = reasons
         self.properties = properties
     }
@@ -211,9 +209,9 @@ public struct MQTTAuthV5: Sendable {
     /// MQTT v5 authentication reason code
     public let reason: MQTTReasonCode
     /// MQTT v5 properties
-    public let properties: MQTTProperties
+    public let properties: Properties
 
-    init(reason: MQTTReasonCode, properties: MQTTProperties) {
+    init(reason: MQTTReasonCode, properties: Properties) {
         self.reason = reason
         self.properties = properties
     }

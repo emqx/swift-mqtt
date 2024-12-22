@@ -8,9 +8,9 @@
 import Network
 
 extension MQTT{
-    final class Monitor{
+    final class Monitor:@unchecked Sendable{
         private let impl:NWPathMonitor
-        private var onChange:((NWPath.Status)->Void)?
+        private let onChange:((NWPath.Status)->Void)?
         init(_ onChange:((NWPath.Status)->Void)?){
             self.impl = NWPathMonitor()
             self.onChange = onChange
@@ -36,3 +36,9 @@ extension MQTT{
     }
 }
 
+extension MQTT{
+    @globalActor
+    public actor Actor{
+        public static let shared:Actor = Actor()
+    }
+}

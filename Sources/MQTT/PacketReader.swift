@@ -13,12 +13,11 @@ protocol PacketReaderDelegate:AnyObject{
     func reader(_ reader:PacketReader, didReceive error: Error)
     func reader(_ reader:PacketReader, didReceive packet: MQTTPacket)
 }
-class PacketReader{
+class PacketReader:@unchecked Sendable{
     private let conn:NWConnection
     private var header:UInt8 = 0
     private var length:Int = 0
     private var multiply = 1
-    private var packet:MQTTIncomingPacket?
     private let version:MQTT.Version
     private weak var delegate:PacketReaderDelegate?
     init(_ delegate: PacketReaderDelegate, conn: NWConnection,version:MQTT.Version) {
@@ -60,7 +59,7 @@ class PacketReader{
             self.parse(data: result)
         }
     }
-    private func readData(_ length:Int,finish:((Data)->Void)?){
+    private func readData(_ length:Int,finish:(@Sendable (Data)->Void)?){
         conn.receive(minimumIncompleteLength: length, maximumLength: length, completion: {[weak self] content, contentContext, isComplete, error in
             guard let self else{
                 return

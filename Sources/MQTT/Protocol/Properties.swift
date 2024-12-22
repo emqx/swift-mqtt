@@ -14,7 +14,7 @@
 import Foundation
 
 /// MQTT v5.0 properties. A property consists of a identifier and a value
-public struct MQTTProperties: Sendable {
+public struct Properties: Sendable {
     /// MQTT Property
     public enum Property: Equatable, Sendable {
         /// Payload format: 0 = bytes, 1 = UTF8 string (available for PUBLISH)
@@ -26,7 +26,7 @@ public struct MQTTProperties: Sendable {
         /// Response topic used in request/response interactions (available for PUBLISH)
         case responseTopic(String)
         /// Correlation data used to id a request/response in request/response interactions (available for PUBLISH)
-        case correlationData(DataBuffer)
+        case correlationData(Data)
         /// Subscription identifier set in SUBSCRIBE packet and included in related PUBLISH packet
         /// (available for PUBLISH, SUBSCRIBE)
         case subscriptionIdentifier(Int)
@@ -39,7 +39,7 @@ public struct MQTTProperties: Sendable {
         /// String indicating the authentication method to use (available for CONNECT, CONNACK, AUTH)
         case authenticationMethod(String)
         /// Data used in authentication (available for CONNECT, CONNACK, AUTH)
-        case authenticationData(DataBuffer)
+        case authenticationData(Data)
         /// Request that server sends a reason string in its CONNACK or DISCONNECT packets (available for CONNECT)
         case requestProblemInformation(UInt8)
         /// Interval to wait before publishing connect will message (available for CONNECT will)
@@ -92,13 +92,13 @@ public struct MQTTProperties: Sendable {
     var properties: [Property]
 }
 
-extension MQTTProperties: ExpressibleByArrayLiteral {
+extension Properties: ExpressibleByArrayLiteral {
     public init(arrayLiteral elements: Property...) {
         self.init(elements)
     }
 }
 
-extension MQTTProperties: Collection {
+extension Properties: Collection {
     public typealias Index = Array<Property>.Index
     public var startIndex: Index { self.properties.startIndex }
     public var endIndex: Index { self.properties.endIndex }
@@ -112,7 +112,7 @@ extension MQTTProperties: Collection {
     }
 }
 
-extension MQTTProperties {
+extension Properties {
     func write(to byteBuffer: inout DataBuffer) throws {
         MQTTSerializer.writeVariableLengthInteger(self.packetSize, to: &byteBuffer)
 
@@ -127,7 +127,7 @@ extension MQTTProperties {
             return .init()
         }
         let packetSize = try MQTTSerializer.readVariableLengthInteger(from: &byteBuffer)
-        guard var propertyBuffer = byteBuffer.readSlice(length: packetSize) else { throw MQTTError.badResponse }
+        guard var propertyBuffer = byteBuffer.readBuffer(length: packetSize) else { throw MQTTError.badResponse }
         while propertyBuffer.readableBytes > 0 {
             let property = try Property.read(from: &propertyBuffer)
             properties.append(property)
@@ -175,7 +175,7 @@ extension MQTTProperties {
         case variableLengthInteger(Int)
         case string(String)
         case stringPair(String, String)
-        case binaryData(DataBuffer)
+        case binaryData(Data)
 
         var packetSize: Int {
             switch self {
@@ -191,8 +191,8 @@ extension MQTTProperties {
                 return 2 + string.utf8.count
             case .stringPair(let string1, let string2):
                 return 2 + string1.utf8.count + 2 + string2.utf8.count
-            case .binaryData(let buffer):
-                return 2 + buffer.readableBytes
+            case .binaryData(let data):
+                return 2 + data.count
             }
         }
 
@@ -211,15 +211,15 @@ extension MQTTProperties {
             case .stringPair(let string1, let string2):
                 try MQTTSerializer.writeString(string1, to: &byteBuffer)
                 try MQTTSerializer.writeString(string2, to: &byteBuffer)
-            case .binaryData(let buffer):
-                try MQTTSerializer.writeBuffer(buffer, to: &byteBuffer)
+            case .binaryData(let data):
+                try MQTTSerializer.writeData(data, to: &byteBuffer)
             }
         }
     }
 }
 
-extension MQTTProperties.Property {
-    var value: MQTTProperties.Value {
+extension Properties.Property {
+    var value: Properties.Value {
         switch self {
         case .payloadFormat(let value): return .byte(value)
         case .messageExpiry(let value): return .fourByteInteger(value)
@@ -251,7 +251,7 @@ extension MQTTProperties.Property {
         }
     }
 
-    var id: MQTTProperties.ID {
+    var id: Properties.ID {
         switch self {
         case .payloadFormat: return .payloadFormat
         case .messageExpiry: return .messageExpiry
@@ -290,7 +290,7 @@ extension MQTTProperties.Property {
 
     static func read(from byteBuffer: inout DataBuffer) throws -> Self {
         guard let idValue: UInt8 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
-        guard let id = MQTTProperties.ID(rawValue: idValue) else { throw MQTTError.badResponse }
+        guard let id = Properties.ID(rawValue: idValue) else { throw MQTTError.badResponse }
         switch id {
         case .payloadFormat:
             guard let value: UInt8 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
@@ -305,8 +305,8 @@ extension MQTTProperties.Property {
             let string = try MQTTSerializer.readString(from: &byteBuffer)
             return .responseTopic(string)
         case .correlationData:
-            let buffer = try MQTTSerializer.readBuffer(from: &byteBuffer)
-            return .correlationData(buffer)
+            let data = try MQTTSerializer.readData(from: &byteBuffer)
+            return .correlationData(data)
         case .subscriptionIdentifier:
             let value = try MQTTSerializer.readVariableLengthInteger(from: &byteBuffer)
             return .subscriptionIdentifier(value)
@@ -323,8 +323,8 @@ extension MQTTProperties.Property {
             let string = try MQTTSerializer.readString(from: &byteBuffer)
             return .authenticationMethod(string)
         case .authenticationData:
-            let buffer = try MQTTSerializer.readBuffer(from: &byteBuffer)
-            return .authenticationData(buffer)
+            let data = try MQTTSerializer.readData(from: &byteBuffer)
+            return .authenticationData(data)
         case .requestProblemInformation:
             guard let value: UInt8 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
             return .requestProblemInformation(value)
@@ -383,7 +383,7 @@ extension MQTTProperties.Property {
     }
 }
 
-extension MQTTProperties{
+extension Properties{
     ///
     /// `PUBACK` properties
     ///
@@ -405,7 +405,7 @@ extension MQTTProperties{
         public var responseInformation: String?
         public var serverReference: String?
         public var authenticationMethod: String?
-        public var authenticationData:DataBuffer?
+        public var authenticationData:Data?
         init(_ properties:[Property]){
             properties.forEach { p in
                 switch p {
@@ -454,7 +454,7 @@ extension MQTTProperties{
         }
     }
 }
-extension MQTTProperties{
+extension Properties{
     ///
     /// `PUBACK` `SUBACK` `PUBREL` `PUBREC` `PUBCOMP` `UNSUBACK` properties
     ///
@@ -480,7 +480,7 @@ extension MQTTProperties{
         }
     }
 }
-extension MQTTProperties{
+extension Properties{
     ///
     /// `PUBLISH` packet properties
     ///
@@ -496,7 +496,7 @@ extension MQTTProperties{
         public var messageExpiry: UInt32?
         public var topicAlias: UInt16?
         public var responseTopic: String?
-        public var correlationData: DataBuffer?
+        public var correlationData: Data?
         public var userProperty: [String: String]?
         public var subscriptionIdentifier: Int?
         public var contentType: String?
@@ -512,8 +512,8 @@ extension MQTTProperties{
                     self.topicAlias = uint
                 case .responseTopic(let str):
                     self.responseTopic = str
-                case .correlationData(let buffer):
-                    self.correlationData = buffer
+                case .correlationData(let data):
+                    self.correlationData = data
                 case .subscriptionIdentifier(let uint):
                     self.subscriptionIdentifier = uint
                 case .contentType(let str):
@@ -562,7 +562,7 @@ extension MQTTProperties{
     }
     
 }
-extension MQTTProperties{
+extension Properties{
     ///
     /// `AUTH` packet properties
     ///
@@ -575,19 +575,19 @@ extension MQTTProperties{
     }
     public struct Auth{
         public var authenticationMethod: String?
-        public var authenticationData: DataBuffer?
+        public var authenticationData: Data?
         public var reasonString: String?
         public var userProperty: [String: String]?
         public init(){}
         init(_ properties:[Property]){
             properties.forEach { p in
                 switch p{
-                case .authenticationData(let buffer):
-                    self.authenticationData = buffer
+                case .authenticationData(let data):
+                    self.authenticationData = data
                 case .authenticationMethod(let str):
                     self.authenticationMethod = str
                 case .reasonString(let str):
-                    self.reasonString = reasonString
+                    self.reasonString = str
                 case .userProperty(let key, let value):
                     if self.userProperty == nil {
                         self.userProperty = [key:value]
@@ -619,16 +619,16 @@ extension MQTTProperties{
         }
     }
 }
-extension MQTTProperties{
+extension Properties{
     ///
     /// `CONNECT` packet properties
     ///
-    public func auth()->Connect{ .init(self.properties) }
+    public func connect()->Connect{ .init(self.properties) }
     ///
     /// Create `CONNECT` packet properties
     ///
-    public init(_ auth:Connect){
-        self.properties = auth.properties
+    public init(_ connect:Connect){
+        self.properties = connect.properties
     }
     public struct Connect{
         public var sessionExpiryInterval: UInt32?
@@ -639,7 +639,7 @@ extension MQTTProperties{
         public var requestProblemInformation: UInt8?
         public var userProperty: [String: String]?
         public var authenticationMethod: String?
-        public var authenticationData: DataBuffer?
+        public var authenticationData: Data?
         public init(){}
         init(_ properties:[Property]){
             properties.forEach { p in
