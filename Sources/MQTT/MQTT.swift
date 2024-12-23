@@ -130,7 +130,7 @@ extension MQTT {
                     id: publish.id
                 )
                 _ = self.publish(packet: newPacket)
-            case let pubRel as PubAckPacket:
+            case let pubRel as PubackPacket:
                 _ = self.pubRel(packet: pubRel)
             default:
                 break
@@ -183,7 +183,7 @@ extension MQTT {
         return connack
     }
    
-    func pubRel(packet: PubAckPacket) -> Promise<Packet> {
+    func pubRel(packet: PubackPacket) -> Promise<Packet> {
         guard socket.status == .opened else { return .init(MQTTError.noConnection) }
         self.inflight.add(packet: packet)
         return self.socket.sendPacket(packet).then{ message in
@@ -194,7 +194,7 @@ extension MQTT {
             guard message.type == .PUBCOMP else {
                 throw MQTTError.unexpectedMessage
             }
-            if let pubAckPacket = message as? PubAckPacket {
+            if let pubAckPacket = message as? PubackPacket {
                 if pubAckPacket.reason.rawValue > 0x7F {
                     throw MQTTError.reasonError(pubAckPacket.reason)
                 }
@@ -238,7 +238,7 @@ extension MQTT {
 
         self.inflight.add(packet: packet)
         return self.socket.sendPacket(packet)
-            .then { message -> PubAckPacket in
+            .then { message -> PubackPacket in
                 self.inflight.remove(id: packet.id)
                 if packet.publish.qos == .atLeastOnce {
                     guard message.type == .PUBACK else {
@@ -249,7 +249,7 @@ extension MQTT {
                         throw MQTTError.unexpectedMessage
                     }
                 }
-                if let pubAckPacket = message as? PubAckPacket {
+                if let pubAckPacket = message as? PubackPacket {
                     if pubAckPacket.reason.rawValue > 0x7F {
                         throw MQTTError.reasonError(pubAckPacket.reason)
                     }
@@ -260,8 +260,8 @@ extension MQTT {
             .then { ackPacket -> Promise<AckV5?>  in
                 let ackInfo = AckV5(reason: ackPacket.reason, properties: ackPacket.properties)
                 if packet.publish.qos == .exactlyOnce {
-                    let pubRelPacket = PubAckPacket(type: .PUBREL, packetId: packet.id)
-                    return self.pubRel(packet: pubRelPacket).then { _ in ackInfo }
+                    let pubrelPacket = PubackPacket(id: packet.id,type: .PUBREL)
+                    return self.pubRel(packet: pubrelPacket).then { _ in ackInfo }
                 }
                 return .init(ackInfo)
             }

@@ -93,7 +93,7 @@ class Reader:@unchecked Sendable{
             case .CONNACK:
                 message = try ConnackPacket.read(version: self.version, from: incoming)
             case .PUBACK, .PUBREC, .PUBREL, .PUBCOMP:
-                message = try PubAckPacket.read(version: self.version, from: incoming)
+                message = try PubackPacket.read(version: self.version, from: incoming)
             case .SUBACK, .UNSUBACK:
                 message = try SubackPacket.read(version: self.version, from: incoming)
             case .PINGRESP:

@@ -347,7 +347,7 @@ struct UnsubPacket: Packet {
     }
 }
 
-struct PubAckPacket: Packet {
+struct PubackPacket: Packet {
     var description: String { "\(self.type)(id:\(id),reason:\(reason))" }
     let type: PacketType
     let id: UInt16
@@ -355,13 +355,13 @@ struct PubAckPacket: Packet {
     let properties: Properties
 
     init(
+        id: UInt16,
         type: PacketType,
-        packetId: UInt16,
         reason: ReasonCode = .success,
         properties: Properties = .init()
     ) {
         self.type = type
-        self.id = packetId
+        self.id = id
         self.reason = reason
         self.properties = properties
     }
@@ -382,10 +382,10 @@ struct PubAckPacket: Packet {
         guard let packetId: UInt16 = remainingData.readInteger() else { throw MQTTError.badResponse }
         switch version {
         case .v3_1_1:
-            return PubAckPacket(type: packet.type, packetId: packetId)
+            return PubackPacket(id:packetId, type: packet.type)
         case .v5_0:
             if remainingData.readableBytes == 0 {
-                return PubAckPacket(type: packet.type, packetId: packetId)
+                return PubackPacket(id: packetId, type: packet.type)
             }
             guard let reasonByte: UInt8 = remainingData.readInteger(),
                   let reason = ReasonCode(rawValue: reasonByte)
@@ -393,7 +393,7 @@ struct PubAckPacket: Packet {
                 throw MQTTError.badResponse
             }
             let properties = try Properties.read(from: &remainingData)
-            return PubAckPacket(type: packet.type, packetId: packetId, reason: reason, properties: properties)
+            return PubackPacket(id: packetId, type: packet.type, reason: reason, properties: properties)
         }
     }
 
