@@ -27,14 +27,10 @@ let mqtt = {
     let params = NWParameters.tls
     let endpoint = NWEndpoint.hostPort(host: "broker.beta.jagat.io", port: 1883)
     let m = MQTT("swift-mqtt", endpoint: endpoint, params: .tcp)
-    m.connectProperties = .init()
-    m.connectProperties?.topicAliasMaximum = 0
-    m.username = "jagat-mqtt-pwd-im"
-    m.password = "jagat-mqtt-pwd-im"
-    m.cleanSession = true
-    m.delegate = client
+    m.config.username = "jagat-mqtt-pwd-im"
+    m.config.password = "jagat-mqtt-pwd-im"
+    m.config.cleanSession = true
     m.usingMonitor()
-    m.usingPinging()
     m.usingRetrier()
     MQTT.logLevel = .debug
     return m
@@ -62,7 +58,23 @@ extension MQTTNIO.MQTTClient{
         _ = self.unsubscribe(from: [topic])
     }
 }
-extension MQTT{  }
+extension MQTT{
+    func open(){
+        self.v5.connect()
+    }
+    func close(){
+        self.v5.close()
+    }
+    func publish(_ topic:String,payload:String){
+        self.v5.publish(topic, payload: payload)
+    }
+    func subscribe(_ topic:String){
+        self.v5.subscribe(topic)
+    }
+    func unsubscribe(_ topic:String){
+        self.v5.unsubscribe(topic)
+    }
+}
 extension CocoaMQTT5{
     func open(){
        _ = self.connect()
@@ -120,77 +132,6 @@ extension MQTTClient:CocoaMQTT5Delegate{
     }
     
     func mqtt5DidDisconnect(_ mqtt5: CocoaMQTT5, withError err: (any Error)?) {
-        
-    }
-}
-extension MQTTClient:MQTTDelegate{
-    ///
-    func mqtt(_ mqtt: MQTT, didUpdate status:MQTT.Status,prev:MQTT.Status){
-
-    }
-    ///
-    func mqtt(_ mqtt: MQTT, didConnectAck ack: ConnAckReasonCode, connAckData: DecodeConnAck?){
-        MQTT.Logger.debug("didConnectAck ack \(ack)")
-    }
-
-    ///
-    func mqtt(_ mqtt: MQTT, didPublishMessage message: MQTT.Message, id: UInt16){
-        MQTT.Logger.debug("didPublishMessage message \(message)")
-    }
-
-    ///
-    func mqtt(_ mqtt: MQTT, didPublishAck id: UInt16, pubAckData: DecodePubAck?){
-        MQTT.Logger.debug("didPublishAck id \(id)")
-    }
-
-    ///
-    func mqtt(_ mqtt: MQTT, didPublishRec id: UInt16, pubRecData: DecodePubRec?){
-        MQTT.Logger.debug("didPublishRec id \(id)")
-    }
-
-    ///
-    func mqtt(_ mqtt: MQTT, didReceiveMessage message: MQTT.Message, id: UInt16, publishData: DecodePublish?){
-        MQTT.Logger.debug("didReceiveMessage message \(message)")
-    }
-
-    ///
-    func mqtt(_ mqtt: MQTT, didSubscribeTopics success: NSDictionary, failed: [String], subAckData: DecodeSubAck?){
-        MQTT.Logger.debug("didSubscribeTopics success \(success), failed \(failed)")
-    }
-
-    ///
-    func mqtt(_ mqtt: MQTT, didUnsubscribeTopics topics: [String], unsubAckData: DecodeUnsubAck?){
-        
-    }
-    
-    ///
-    func mqtt(_ mqtt: MQTT, didReceiveDisconnectReasonCode reasonCode: MQTT.CloseCode){
-        
-    }
-    
-    ///
-    func mqtt(_ mqtt: MQTT, didReceiveAuthReasonCode reasonCode: AuthReasonCode){
-        
-    }
-    
-    ///
-    /// socket did recevied error.
-    /// Most of the time you don't have to care about this, because it's already taken care of internally
-    func mqtt(_ mqtt:MQTT, didReceive error:Error){
-        
-    }
-
-    ///
-    func mqtt(_ mqtt: MQTT, didPublishComplete id: UInt16,  pubCompData: DecodePubComp?){
-        
-    }
-    ///
-    func mqttDidPing(_ mqtt: MQTT){
-        
-    }
-
-    ///
-    func mqttDidReceivePong(_ mqtt: MQTT){
         
     }
 }

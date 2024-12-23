@@ -96,8 +96,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/sutext/swift-promise",
       "state" : {
-        "revision" : "b6215197c07251cbf9e0d192bf03be043e479cfb",
-        "version" : "1.0.0"
+        "revision" : "4f7b7ed1a58b99c3b98e8e4a169c18590b046bb1",
+        "version" : "1.1.0"
       }
     },
     {
