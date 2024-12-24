@@ -76,7 +76,8 @@ class Atomic<T> : @unchecked Sendable{
 }
 /// Array of inflight packets. Used to resend packets when reconnecting to server
 struct Inflight : Sendable{
-    @Atomic private(set) var packets: [Packet] = []
+    @Atomic
+    private(set) var packets: [Packet] = []
     /// add packet
     func add(packet: Packet) {
         self.$packets.write { pkgs in

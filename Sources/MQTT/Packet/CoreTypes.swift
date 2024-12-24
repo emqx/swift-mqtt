@@ -8,60 +8,7 @@
 import Foundation
 
 
-/// Indicates the level of assurance for delivery of a packet.
-public enum MQTTQoS: UInt8, Sendable {
-    /// fire and forget
-    case atMostOnce = 0
-    /// wait for PUBACK, if you don't receive it after a period of time retry sending
-    case atLeastOnce = 1
-    /// wait for PUBREC, send PUBREL and then wait for PUBCOMP
-    case exactlyOnce = 2
-}
 
-extension MQTT{
-    public enum Version{
-        case v5_0
-        case v3_1_1
-        var string:String{
-            switch self {
-            case .v5_0:
-                return "5.0"
-            case .v3_1_1:
-                return "3.1.1"
-            }
-        }
-        var byte: UInt8 {
-            switch self {
-            case .v3_1_1:
-                return 4
-            case .v5_0:
-                return 5
-            }
-        }
-    }
-    public struct Config{
-        /// Version of MQTT server client is connecting to        
-        public var clientId: String
-        /// timeout for connecting to server
-        public var connectTimeout: TimeInterval = 5
-        /// timeout for server response
-        public var timeout: TimeInterval = 5
-        /// timeout for server response
-        public var pingTimeout: TimeInterval = 5
-        /// MQTT user name.
-        public var username: String? = nil
-        /// MQTT password.
-        public var password: String? = nil
-        
-        public var cleanSession:Bool = true
-        /// MQTT keep alive period.
-        public var keepAlive: UInt16 = 60{
-            didSet{
-                assert(keepAlive>0, "The keepAlive value must be greater than 0!")
-            }
-        }
-    }
-}
 
 
 /// MQTT Packet type enumeration
@@ -87,27 +34,27 @@ public enum PacketType: UInt8, Sendable {
 public struct Message: Sendable {
     /// Quality of Service for message.
     public let qos: MQTTQoS
-
-    /// Whether this is a retained message.
-    public let retain: Bool
-
+    
     /// Whether this is a duplicate publish message.
     public let dup: Bool
 
     /// Topic name on which the message is published.
-    public let topicName: String
+    public let topic: String
+    
+    /// Whether this is a retained message.
+    public let retain: Bool
+    
+    /// Message payload.
+    public let payload: Data
 
     /// MQTT v5 properties
     public let properties: Properties
 
-    /// Message payload.
-    public let payload: Data
-
-    public init(qos: MQTTQoS, retain: Bool, dup: Bool = false, topicName: String, payload: Data, properties: Properties) {
+    init(qos: MQTTQoS, dup: Bool, topic: String, retain: Bool, payload: Data, properties: Properties) {
         self.qos = qos
-        self.retain = retain
         self.dup = dup
-        self.topicName = topicName
+        self.topic = topic
+        self.retain = retain
         self.payload = payload
         self.properties = properties
     }

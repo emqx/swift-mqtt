@@ -10,8 +10,8 @@ import Network
 
 protocol ReaderDelegate:AnyObject{
     func readCompleted(_ reader:Reader)
-    func reader(_ reader:Reader, didReceive error: Error)
     func reader(_ reader:Reader, didReceive packet: Packet)
+    func reader(_ reader:Reader, didReceive error: Error)
 }
 class Reader:@unchecked Sendable{
     private let conn:NWConnection
@@ -26,16 +26,20 @@ class Reader:@unchecked Sendable{
         self.version = version
     }
     func start(){
-        self.readHeader()
+        if self.conn.isudp{
+            
+        }else{
+            self.readHeader()
+        }
     }
-    func readHeader(){
+    private func readHeader(){
         self.reset()
         self.readData(1) { result in
             self.header = result[0]
             self.readLength()
         }
     }
-    func readLength(){
+    private func readLength(){
         self.readData(1) { result in
             let byte = result[0]
             self.length += Int(byte & 0x7f) * self.multiply
@@ -51,13 +55,28 @@ class Reader:@unchecked Sendable{
             if self.length > 0{
                 return self.readPayload()
             }
-            self.parse(data: Data())
+            self.dispath(data: Data())
         }
     }
-    func readPayload(){
-        self.readData(length) { result in
-            self.parse(data: result)
+    
+    private func readPayload(){
+        self.readData(length) { data in
+            self.dispath(data: data)
         }
+    }
+    private func dispath(data:Data){
+        guard let type = PacketType(rawValue: self.header & 0xF0) else {
+            self.delegate?.reader(self, didReceive: Error.unkownFrame(self.header, data))
+            return
+        }
+        let incoming:IncomingPacket = .init(type: type, flags: self.header & 0xF, remainingData: .init(data: data))
+        do {
+            let message = try incoming.transfer(with: self.version)
+            self.delegate?.reader(self, didReceive: message)
+        } catch {
+            self.delegate?.reader(self, didReceive: error)
+        }
+        self.readHeader()
     }
     private func readData(_ length:Int,finish:(@Sendable (Data)->Void)?){
         conn.receive(minimumIncompleteLength: length, maximumLength: length, completion: {[weak self] content, contentContext, isComplete, error in
@@ -79,37 +98,26 @@ class Reader:@unchecked Sendable{
             finish?(data)
         })
     }
-    private func parse(data:Data){
-        guard let type = PacketType(rawValue: self.header & 0xF0) else {
-            self.delegate?.reader(self, didReceive: Error.unkownFrame(header, data))
-            return
-        }
-        let incoming:IncomingPacket = .init(type: type, flags: self.header & 0xF, remainingData: .init(data: data))
-        do {
-            let message: Packet
-            switch incoming.type {
-            case .PUBLISH:
-                message = try PublishPacket.read(version: self.version, from: incoming)
-            case .CONNACK:
-                message = try ConnackPacket.read(version: self.version, from: incoming)
-            case .PUBACK, .PUBREC, .PUBREL, .PUBCOMP:
-                message = try PubackPacket.read(version: self.version, from: incoming)
-            case .SUBACK, .UNSUBACK:
-                message = try SubackPacket.read(version: self.version, from: incoming)
-            case .PINGRESP:
-                message = try PingrespPacket.read(version: self.version, from: incoming)
-            case .DISCONNECT:
-                message = try DisconnectPacket.read(version: self.version, from: incoming)
-            case .AUTH:
-                message = try AuthPacket.read(version: self.version, from: incoming)
-            default:
-                throw MQTTError.decodeError
+    private func readMessage(){
+        conn.receiveMessage {[weak self] content, contentContext, isComplete, error in
+            guard let self else{ return }
+            if let error{
+                self.delegate?.reader(self, didReceive: Error.networkError(error))
+                return
             }
-            self.delegate?.reader(self, didReceive: message)
-        } catch {
-            self.delegate?.reader(self, didReceive: error)
+            guard let data = content else{
+                self.delegate?.reader(self, didReceive: MQTTError.badResponse)
+                return
+            }
+            do {
+                var buffer = DataBuffer(data: data)
+                let incoming = try IncomingPacket.read(from: &buffer)
+                let message = try incoming.transfer(with: self.version)
+                self.delegate?.reader(self, didReceive: message)
+            }catch{
+                self.delegate?.reader(self, didReceive: error)
+            }
         }
-        self.readHeader()
     }
     private func reset(){
         header = 0
@@ -138,5 +146,13 @@ extension Reader{
                 return "Reader: network error:\(error)"
             }
         }
+    }
+}
+extension NWConnection{
+    var isudp:Bool{
+        if let opt = parameters.defaultProtocolStack.transportProtocol,opt is NWProtocolUDP{
+            return true
+        }
+        return false
     }
 }

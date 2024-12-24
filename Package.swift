@@ -13,7 +13,7 @@ let package = Package(
             targets: ["MQTT"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/sutext/swift-promise", from: "1.1.0")
+        .package(url: "https://github.com/sutext/swift-promise", from: "1.2.0")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.

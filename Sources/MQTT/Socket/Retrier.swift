@@ -9,7 +9,7 @@ import Foundation
 
 public final class Retrier{
     /// Retry filter not retry when return true
-    public typealias Filter = (ReasonCode,MQTT.CloseReason)->Bool
+    public typealias Filter = @Sendable (ReasonCode,MQTT.CloseReason)->Bool
     /// Retry backoff policy
     public enum Policy{
         /// The retry time grows linearly

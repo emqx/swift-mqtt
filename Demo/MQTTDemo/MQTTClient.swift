@@ -26,15 +26,34 @@ let client = MQTTClient()
 let mqtt = {
     let params = NWParameters.tls
     let endpoint = NWEndpoint.hostPort(host: "broker.beta.jagat.io", port: 1883)
-    let m = MQTT("swift-mqtt", endpoint: endpoint, params: .tcp)
+    let m = MQTT.ClientV5("swift-mqtt", endpoint: endpoint, params: .tcp)
     m.config.username = "jagat-mqtt-pwd-im"
     m.config.password = "jagat-mqtt-pwd-im"
-    m.config.cleanSession = true
     m.usingMonitor()
     m.usingRetrier()
     MQTT.logLevel = .debug
     return m
 }()
+extension NWParameters{
+    var isTCP:Bool{
+        if let _ = self.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options{
+            return true
+        }
+        return false
+    }
+    var isUDP:Bool{
+        if let _ = self.defaultProtocolStack.transportProtocol as? NWProtocolUDP.Options{
+            return true
+        }
+        return false
+    }
+    var isQUIC:Bool{
+        if let _ = self.defaultProtocolStack.transportProtocol as? NWProtocolQUIC.Options{
+            return true
+        }
+        return false
+    }
+}
 //let mqtt = {
 //    let params = NWParameters.tls
 //    let endpoint = NWEndpoint.hostPort(host: "broker.beta.jagat.io", port: 1883)
@@ -58,21 +77,18 @@ extension MQTTNIO.MQTTClient{
         _ = self.unsubscribe(from: [topic])
     }
 }
-extension MQTT{
-    func open(){
-        self.v5.connect()
-    }
-    func close(){
-        self.v5.close()
-    }
+extension MQTT.Client{
+
     func publish(_ topic:String,payload:String){
-        self.v5.publish(topic, payload: payload)
+        if let data = payload.data(using: .utf8){
+            self.publish(to:topic, payload: data)
+        }
     }
     func subscribe(_ topic:String){
-        self.v5.subscribe(topic)
+        self.subscribe(to: topic)
     }
     func unsubscribe(_ topic:String){
-        self.v5.unsubscribe(topic)
+        self.unsubscribe(from:topic)
     }
 }
 extension CocoaMQTT5{

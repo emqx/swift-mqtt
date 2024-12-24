@@ -1,66 +1,116 @@
 //
-//  MQTT5.swift
+//  ClientV5.swift
 //  swift-mqtt
 //
 //  Created by supertext on 2024/12/23.
 //
 
 import Promise
+import Network
 import Foundation
 
-extension MQTT.V5{
-    /// Publish message to topic
+extension MQTT{
+    public final class ClientV5 : @unchecked Sendable{
+        private let client:Client
+        public var config:Config { self.client.config }
+        public var status:Status { self.client.status }
+        public var isOpened:Bool { self.client.status == .opened }
+        /// Initial v5 client object
+        ///
+        /// - Parameters:
+        ///   - clientID: Client Identifier
+        ///   - endpoint:The network endpoint
+        ///   - params: The connection parameters `default` is `.tls`
+        public init(_ clientId: String, endpoint:NWEndpoint,params:NWParameters = .tls) {
+            self.client = Client(clientId, endpoint: endpoint,params: params)
+            self.client.config.version = .v5_0
+        }
+    }
+}
+extension MQTT.ClientV5{
+    /// Enabling the retry mechanism
+    ///
     /// - Parameters:
-    ///     - topicName: Topic name on which the message is published
-    ///     - payload: Message payload
-    ///     - qos: Quality of Service for message.
-    ///     - retain: Whether this is a retained message.
-    ///     - properties: properties to attach to publish message
+    ///    - policy: Retry policcy
+    ///    - limits: max retry times
+    ///    - filter: filter retry when some code and reason
+    ///
+    public func usingRetrier(
+        _ policy:Retrier.Policy = .exponential(),
+        limits:UInt = 10,
+        filter:Retrier.Filter? = nil)
+    {
+        self.client.usingRetrier(policy,limits: limits,filter: filter)
+    }
+    /// Enabling the network mornitor mechanism
+    ///
+    /// - Parameters:
+    ///    - enable: use monitor or not.
+    ///
+    public func usingMonitor(_ enable:Bool = true){
+        self.client.usingMonitor(enable)
+    }
+}
+extension MQTT.ClientV5{
+    /// Publish message to topic
+    ///
+    /// - Parameters:
+    ///    - topic: Topic name on which the message is published
+    ///    - payload: Message payload
+    ///    - qos: Quality of Service for message.
+    ///    - retain: Whether this is a retained message.
+    ///    - properties: properties to attach to publish message
+    ///
     /// - Returns: Future waiting for publish to complete. Depending on QoS setting the future will complete
     ///     when message is sent, when PUBACK is received or when PUBREC and following PUBCOMP are
     ///     received. QoS1 and above return an `MQTTAckV5` which contains a `reason` and `properties`
     @discardableResult
-    public func publish(_ topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = [])->Promise<AckV5?>{
+    public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = [])->Promise<AckV5?>{
         let data = payload.data(using: .utf8) ?? Data()
-        return self.publish(topic, payload: data,qos: qos,retain: retain,properties: properties)
+        return self.publish(to:topic, payload: data,qos: qos,retain: retain,properties: properties)
     }
     /// Publish message to topic
+    ///
     /// - Parameters:
-    ///     - topicName: Topic name on which the message is published
-    ///     - payload: Message payload
-    ///     - qos: Quality of Service for message.
-    ///     - retain: Whether this is a retained message.
-    ///     - properties: properties to attach to publish message
+    ///    - topic: Topic name on which the message is published
+    ///    - payload: Message payload
+    ///    - qos: Quality of Service for message.
+    ///    - retain: Whether this is a retained message.
+    ///    - properties: properties to attach to publish message
+    ///
     /// - Returns: Future waiting for publish to complete. Depending on QoS setting the future will complete
     ///     when message is sent, when PUBACK is received or when PUBREC and following PUBCOMP are
     ///     received. QoS1 and above return an `MQTTAckV5` which contains a `reason` and `properties`
     @discardableResult
-    public func publish(_ topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<AckV5?> {
-        let info = Message(qos: qos, retain: retain,dup: false, topicName: topic, payload: payload, properties: properties)
-        let packet = PublishPacket(publish: info, id: client.nextPacketId())
+    public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<AckV5?> {
+        let message = Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: properties)
+        let packet = PublishPacket(id: client.nextPacketId(),message: message)
         return client.publish(packet: packet)
     }
     
     /// Subscribe to topic
+    ///
     /// - Parameters:
-    ///     - subscriptions: Subscription infos
-    ///     - properties: properties to attach to subscribe message
+    ///    - topic: Subscription topic
+    ///    - properties: properties to attach to subscribe message
+    ///
     /// - Returns: Future waiting for subscribe to complete. Will wait for SUBACK message from server and
     ///     return its contents
     @discardableResult
-    public func subscribe(_ topic:String,qos:MQTTQoS = .atLeastOnce,properties:Properties = [])->Promise<Suback.V5>{
-        let info = Subscribe.V5(topicFilter: topic, qos: qos)
-        return self.subscribe([info], properties: properties)
+    public func subscribe(to topic:String,qos:MQTTQoS = .atLeastOnce,properties:Properties = [])->Promise<Suback.V5>{
+        return self.subscribe(to: [Subscribe.V5(topicFilter: topic, qos: qos)], properties: properties)
     }
     /// Subscribe to topic
+    ///
     /// - Parameters:
-    ///     - subscriptions: Subscription infos
-    ///     - properties: properties to attach to subscribe message
+    ///    - subscriptions: Subscription infos
+    ///    - properties: properties to attach to subscribe message
+    ///
     /// - Returns: Future waiting for subscribe to complete. Will wait for SUBACK message from server and
     ///     return its contents
     @discardableResult
-    public func subscribe(_ topics:[Subscribe.V5],properties:Properties = [])->Promise<Suback.V5>{
-        let packet = SubscribePacket(subscriptions: topics, properties: properties, id: client.nextPacketId())
+    public func subscribe(to subscriptions:[Subscribe.V5],properties:Properties = [])->Promise<Suback.V5>{
+        let packet = SubscribePacket(subscriptions: subscriptions, properties: properties, id: client.nextPacketId())
         return client.subscribe(packet: packet).then { suback in
             return Suback.V5(reasons: suback.reasons,properties: properties)
         }
@@ -73,8 +123,8 @@ extension MQTT.V5{
     /// - Returns: Future waiting for unsubscribe to complete. Will wait for UNSUBACK message from server and
     ///     return its contents
     @discardableResult
-    public func unsubscribe(_ topic:String,properties:Properties = []) -> Promise<Suback.V5> {
-        return self.unsubscribe([topic], properties: properties)
+    public func unsubscribe(from topic:String,properties:Properties = []) -> Promise<Suback.V5> {
+        return self.unsubscribe(from:[topic], properties: properties)
     }
     
     /// Unsubscribe from topic
@@ -84,8 +134,8 @@ extension MQTT.V5{
     /// - Returns: Future waiting for unsubscribe to complete. Will wait for UNSUBACK message from server and
     ///     return its contents
     @discardableResult
-    public func unsubscribe(_ topics:[String],properties:Properties = []) -> Promise<Suback.V5> {
-        let packet = UnsubPacket(subscriptions: topics, properties: properties, id: client.nextPacketId())
+    public func unsubscribe(from topics:[String],properties:Properties = []) -> Promise<Suback.V5> {
+        let packet = UnsubscribePacket(subscriptions: topics, properties: properties, id: client.nextPacketId())
         return client.unsubscribe(packet: packet).then { suback in
             return Suback.V5(reasons: suback.reasons,properties: properties)
         }
@@ -106,30 +156,27 @@ extension MQTT.V5{
     ///   - cleanStart: should we start with a new session
     ///   - properties: properties to attach to connect message
     ///   - will: Publish message to be posted as soon as connection is made
-    ///   - authWorkflow: The authentication workflow. This is currently unimplemented.
-    ///   - connectConfiguration: Override client configuration during connection
+    ///   - authflow: The authentication workflow. This is currently unimplemented.
     /// - Returns: EventLoopFuture to be updated with connack
     ///
     @discardableResult
-    public func connect(
+    public func open(
+        will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool, properties: Properties)? = nil,
         cleanStart: Bool = true,
         properties: Properties = .init(),
-        will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool, properties: Properties)? = nil,
-        config:MQTT.Config? = nil,
         authflow: (@Sendable (AuthV5) -> Promise<AuthV5>)? = nil
-        
     ) -> Promise<ConnackV5> {
+        
         let publish = will.map {
             Message(
                 qos: .atMostOnce,
-                retain: $0.retain,
                 dup: false,
-                topicName: $0.topic,
+                topic: $0.topic,
+                retain: $0.retain,
                 payload: $0.payload,
                 properties: $0.properties
             )
         }
-        let config = config ?? self.client.config
         let packet = ConnectPacket(
             cleanSession: cleanStart,
             keepAliveSeconds: config.keepAlive,
@@ -140,7 +187,7 @@ extension MQTT.V5{
             will: publish
         )
 
-        return self.client.connect(packet: packet, authflow: authflow).then {
+        return self.client.open(packet, authflow: authflow).then {
             .init(
                 sessionPresent: $0.sessionPresent,
                 reason: ReasonCode(rawValue: $0.returnCode) ?? .unrecognisedReason,
@@ -155,7 +202,7 @@ extension MQTT.V5{
     /// - Returns: Future waiting on disconnect message to be sent
     ///
     @discardableResult
-    public func close(_ code:ReasonCode = .success,properties:Properties = .init())->Promise<Void>{
+    public func close(_ code:ReasonCode = .success,properties:Properties = [])->Promise<Void>{
         self.client.close(packet: DisconnectPacket(reason: code,properties: properties))
     }
     /// Re-authenticate with server

@@ -8,113 +8,38 @@
 import Foundation
 
 /// MQTT v5.0 properties. A property consists of a identifier and a value
-public struct Properties: Sendable {
-    /// MQTT Property
-    public enum Property: Equatable, Sendable {
-        /// Payload format: 0 = bytes, 1 = UTF8 string (available for PUBLISH)
-        case payloadFormat(UInt8)
-        /// Message expiry indicates the lifetime of the message (available for PUBLISH)
-        case messageExpiry(UInt32)
-        /// String describing the content of the message eg "application/json" (available for PUBLISH)
-        case contentType(String)
-        /// Response topic used in request/response interactions (available for PUBLISH)
-        case responseTopic(String)
-        /// Correlation data used to id a request/response in request/response interactions (available for PUBLISH)
-        case correlationData(Data)
-        /// Subscription identifier set in SUBSCRIBE packet and included in related PUBLISH packet
-        /// (available for PUBLISH, SUBSCRIBE)
-        case subscriptionIdentifier(Int)
-        /// Interval before session expires (available for CONNECT, CONNACK, DISCONNECT)
-        case sessionExpiryInterval(UInt32)
-        /// Client identifier assigned to client if they didn't provide one (available for CONNACK)
-        case assignedClientIdentifier(String)
-        /// Indication to client on how long server will keep connection without activity (available for CONNACK)
-        case serverKeepAlive(UInt16)
-        /// String indicating the authentication method to use (available for CONNECT, CONNACK, AUTH)
-        case authenticationMethod(String)
-        /// Data used in authentication (available for CONNECT, CONNACK, AUTH)
-        case authenticationData(Data)
-        /// Request that server sends a reason string in its CONNACK or DISCONNECT packets (available for CONNECT)
-        case requestProblemInformation(UInt8)
-        /// Interval to wait before publishing connect will message (available for CONNECT will)
-        case willDelayInterval(UInt32)
-        /// Request response information from server (available for CONNECT)
-        case requestResponseInformation(UInt8)
-        /// Response information from server. Commonly used to pass a globally unique portion
-        /// of the topic tree for this client (available for CONNACK)
-        case responseInformation(String)
-        /// Server uses serverReference in CONNACK to indicate to either use another server or that the server has moved
-        /// (available for CONNACK)
-        case serverReference(String)
-        /// String representing the reason associated with this response (available for CONNACK,
-        /// PUBACK, PUBREC, PUBREL, PUBCOMP, SUBACK, UNSUBACK, DISCONNECT, AUTH)
-        case reasonString(String)
-        /// Maximum number of PUBLISH, PUBREL messages that can be sent without receiving a response (available for CONNECT, CONNACK)
-        case receiveMaximum(UInt16)
-        /// Maximum number for topic alias (available for CONNECT, CONNACK)
-        case topicAliasMaximum(UInt16)
-        /// Topic alias. Use instead of full topic name to reduce packet size (available for PUBLISH)
-        case topicAlias(UInt16)
-        /// Maximum QoS supported by server (available for CONNACK)
-        case maximumQoS(MQTTQoS)
-        /// Does server support retained publish packets (available for CONNACK)
-        case retainAvailable(UInt8)
-        /// User property, key and value (available for all packets)
-        case userProperty(String, String)
-        /// Maximum packet size supported (available for CONNECT, CONNACK)
-        case maximumPacketSize(UInt32)
-        /// Does server support wildcard subscription (available for CONNACK)
-        case wildcardSubscriptionAvailable(UInt8)
-        /// Does server support subscription identifiers (available for CONNACK)
-        case subscriptionIdentifierAvailable(UInt8)
-        /// Does server support shared subscriptions (available for CONNACK)
-        case sharedSubscriptionAvailable(UInt8)
-    }
 
-    public init() {
-        self.properties = []
-    }
+public typealias Properties = [Property]
 
-    public init(_ properties: [Property]) {
-        self.properties = properties
-    }
-
-    public mutating func append(_ property: Property) {
-        self.properties.append(property)
-    }
-
-    var properties: [Property]
-}
-
-extension Properties: ExpressibleByArrayLiteral {
-    public init(arrayLiteral elements: Property...) {
-        self.init(elements)
-    }
-}
-
-extension Properties: Collection {
-    public typealias Index = Array<Property>.Index
-    public var startIndex: Index { self.properties.startIndex }
-    public var endIndex: Index { self.properties.endIndex }
-
-    public subscript(_ index: Index) -> Property {
-        return self.properties[index]
-    }
-
-    public func index(after index: Index) -> Index {
-        return self.properties.index(after: index)
-    }
-}
-
-extension Properties {
+extension Properties{
+    ///
+    /// `PUBACK` `SUBACK` `PUBREL` `PUBREC` `PUBCOMP` `UNSUBACK` properties
+    ///
+    public func ack()->Property.ACK{ .init(self) }
+    ///
+    /// `AUTH` packet properties
+    ///
+    public func auth()->Property.Auth{ .init(self) }
+    ///
+    /// `CONNECT` packet properties
+    ///
+    public func connect()->Property.Connect{ .init(self) }
+    ///
+    /// `PUBACK` properties
+    ///
+    public func connack()->Property.Connack{ .init(self) }
+    ///
+    /// `PUBLISH` packet properties
+    ///
+    public func publish()->Property.Publish{ .init(self) }
+    
     func write(to byteBuffer: inout DataBuffer) throws {
         Serializer.writeVariableLengthInteger(self.packetSize, to: &byteBuffer)
 
-        for property in self.properties {
+        for property in self {
             try property.write(to: &byteBuffer)
         }
     }
-
     static func read(from byteBuffer: inout DataBuffer) throws -> Self {
         var properties: [Property] = []
         guard byteBuffer.readableBytes > 0 else {
@@ -128,10 +53,76 @@ extension Properties {
         }
         return .init(properties)
     }
-
     var packetSize: Int {
-        return self.properties.reduce(0) { $0 + 1 + $1.value.packetSize }
+        return self.reduce(0) { $0 + 1 + $1.value.packetSize }
     }
+}
+
+
+/// MQTT v5.0 properties. A property consists of a identifier and a value
+
+public enum Property: Equatable, Sendable {
+    /// Payload format: 0 = bytes, 1 = UTF8 string (available for PUBLISH)
+    case payloadFormat(UInt8)
+    /// Message expiry indicates the lifetime of the message (available for PUBLISH)
+    case messageExpiry(UInt32)
+    /// String describing the content of the message eg "application/json" (available for PUBLISH)
+    case contentType(String)
+    /// Response topic used in request/response interactions (available for PUBLISH)
+    case responseTopic(String)
+    /// Correlation data used to id a request/response in request/response interactions (available for PUBLISH)
+    case correlationData(Data)
+    /// Subscription identifier set in SUBSCRIBE packet and included in related PUBLISH packet
+    /// (available for PUBLISH, SUBSCRIBE)
+    case subscriptionIdentifier(Int)
+    /// Interval before session expires (available for CONNECT, CONNACK, DISCONNECT)
+    case sessionExpiryInterval(UInt32)
+    /// Client identifier assigned to client if they didn't provide one (available for CONNACK)
+    case assignedClientIdentifier(String)
+    /// Indication to client on how long server will keep connection without activity (available for CONNACK)
+    case serverKeepAlive(UInt16)
+    /// String indicating the authentication method to use (available for CONNECT, CONNACK, AUTH)
+    case authenticationMethod(String)
+    /// Data used in authentication (available for CONNECT, CONNACK, AUTH)
+    case authenticationData(Data)
+    /// Request that server sends a reason string in its CONNACK or DISCONNECT packets (available for CONNECT)
+    case requestProblemInformation(UInt8)
+    /// Interval to wait before publishing connect will message (available for CONNECT will)
+    case willDelayInterval(UInt32)
+    /// Request response information from server (available for CONNECT)
+    case requestResponseInformation(UInt8)
+    /// Response information from server. Commonly used to pass a globally unique portion
+    /// of the topic tree for this client (available for CONNACK)
+    case responseInformation(String)
+    /// Server uses serverReference in CONNACK to indicate to either use another server or that the server has moved
+    /// (available for CONNACK)
+    case serverReference(String)
+    /// String representing the reason associated with this response (available for CONNACK,
+    /// PUBACK, PUBREC, PUBREL, PUBCOMP, SUBACK, UNSUBACK, DISCONNECT, AUTH)
+    case reasonString(String)
+    /// Maximum number of PUBLISH, PUBREL messages that can be sent without receiving a response (available for CONNECT, CONNACK)
+    case receiveMaximum(UInt16)
+    /// Maximum number for topic alias (available for CONNECT, CONNACK)
+    case topicAliasMaximum(UInt16)
+    /// Topic alias. Use instead of full topic name to reduce packet size (available for PUBLISH)
+    case topicAlias(UInt16)
+    /// Maximum QoS supported by server (available for CONNACK)
+    case maximumQoS(MQTTQoS)
+    /// Does server support retained publish packets (available for CONNACK)
+    case retainAvailable(UInt8)
+    /// User property, key and value (available for all packets)
+    case userProperty(String, String)
+    /// Maximum packet size supported (available for CONNECT, CONNACK)
+    case maximumPacketSize(UInt32)
+    /// Does server support wildcard subscription (available for CONNACK)
+    case wildcardSubscriptionAvailable(UInt8)
+    /// Does server support subscription identifiers (available for CONNACK)
+    case subscriptionIdentifierAvailable(UInt8)
+    /// Does server support shared subscriptions (available for CONNACK)
+    case sharedSubscriptionAvailable(UInt8)
+}
+
+extension Property {
     enum ID: UInt8 {
         case payloadFormat = 1
         case messageExpiry = 2
@@ -161,7 +152,6 @@ extension Properties {
         case subscriptionIdentifierAvailable = 41
         case sharedSubscriptionAvailable = 42
     }
-
     enum Value: Equatable {
         case byte(UInt8)
         case twoByteInteger(UInt16)
@@ -212,8 +202,8 @@ extension Properties {
     }
 }
 
-extension Properties.Property {
-    var value: Properties.Value {
+extension Property {
+    var value: Value {
         switch self {
         case .payloadFormat(let value): return .byte(value)
         case .messageExpiry(let value): return .fourByteInteger(value)
@@ -244,8 +234,7 @@ extension Properties.Property {
         case .sharedSubscriptionAvailable(let value): return .byte(value)
         }
     }
-
-    var id: Properties.ID {
+    var id: ID {
         switch self {
         case .payloadFormat: return .payloadFormat
         case .messageExpiry: return .messageExpiry
@@ -284,7 +273,7 @@ extension Properties.Property {
 
     static func read(from byteBuffer: inout DataBuffer) throws -> Self {
         guard let idValue: UInt8 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
-        guard let id = Properties.ID(rawValue: idValue) else { throw MQTTError.badResponse }
+        guard let id = Property.ID(rawValue: idValue) else { throw MQTTError.badResponse }
         switch id {
         case .payloadFormat:
             guard let value: UInt8 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
@@ -377,11 +366,10 @@ extension Properties.Property {
     }
 }
 
-extension Properties{
+extension Property{
     ///
-    /// `PUBACK` properties
+    /// CONNACK properties
     ///
-    public func connack()->Connack{ .init(self.properties) }
     public struct Connack{
         public var sessionExpiryInterval: UInt32?
         public var receiveMaximum: UInt16?
@@ -400,7 +388,7 @@ extension Properties{
         public var serverReference: String?
         public var authenticationMethod: String?
         public var authenticationData:Data?
-        init(_ properties:[Property]){
+        fileprivate init(_ properties:Properties){
             properties.forEach { p in
                 switch p {
                 case .sessionExpiryInterval(let uInt32):
@@ -448,15 +436,11 @@ extension Properties{
         }
     }
 }
-extension Properties{
-    ///
-    /// `PUBACK` `SUBACK` `PUBREL` `PUBREC` `PUBCOMP` `UNSUBACK` properties
-    ///
-    public func ack()->ACK{ .init(self.properties) }
+extension Property{
     public struct ACK{
         public var reasonString: String?
         public var userProperty: [String: String]?
-        init(_ properties:[Property]){
+        fileprivate init(_ properties:Properties){
             properties.forEach { p in
                 switch p{
                 case .reasonString(let str):
@@ -474,17 +458,8 @@ extension Properties{
         }
     }
 }
-extension Properties{
-    ///
-    /// `PUBLISH` packet properties
-    ///
-    public func publish()->Publish{ .init(self.properties) }
-    ///
-    /// Create `PUBLISH` properties
-    ///
-    public init(_ publish:Publish){
-        self.properties = publish.properties
-    }
+extension Property{
+    
     public struct Publish{
         public var payloadFormat: UInt8?
         public var messageExpiry: UInt32?
@@ -495,7 +470,7 @@ extension Properties{
         public var subscriptionIdentifier: Int?
         public var contentType: String?
         public init(){}
-        init(_ properties:[Property]){
+        init(_ properties:Properties){
             properties.forEach { p in
                 switch p{
                 case .payloadFormat(let uint):
@@ -523,8 +498,8 @@ extension Properties{
                 }
             }
         }
-        var properties:[Property]{
-            var result = [Property]()
+        public var properties:Properties{
+            var result = Properties()
             if let payloadFormat{
                 result.append(.payloadFormat(payloadFormat))
             }
@@ -556,24 +531,15 @@ extension Properties{
     }
     
 }
-extension Properties{
-    ///
-    /// `AUTH` packet properties
-    ///
-    public func auth()->Auth{ .init(self.properties) }
-    ///
-    /// Create `AUTH` packet properties
-    ///
-    public init(_ auth:Auth){
-        self.properties = auth.properties
-    }
+extension Property{
+    
     public struct Auth{
         public var authenticationMethod: String?
         public var authenticationData: Data?
         public var reasonString: String?
         public var userProperty: [String: String]?
         public init(){}
-        init(_ properties:[Property]){
+        init(_ properties:Properties){
             properties.forEach { p in
                 switch p{
                 case .authenticationData(let data):
@@ -593,8 +559,8 @@ extension Properties{
                 }
             }
         }
-        var properties:[Property]{
-            var result = [Property]()
+        public var properties:Properties{
+            var result = Properties()
             if let authenticationMethod{
                 result.append(.authenticationMethod(authenticationMethod))
             }
@@ -613,17 +579,8 @@ extension Properties{
         }
     }
 }
-extension Properties{
-    ///
-    /// `CONNECT` packet properties
-    ///
-    public func connect()->Connect{ .init(self.properties) }
-    ///
-    /// Create `CONNECT` packet properties
-    ///
-    public init(_ connect:Connect){
-        self.properties = connect.properties
-    }
+extension Property{
+    
     public struct Connect{
         public var sessionExpiryInterval: UInt32?
         public var receiveMaximum: UInt16?
@@ -635,7 +592,7 @@ extension Properties{
         public var authenticationMethod: String?
         public var authenticationData: Data?
         public init(){}
-        init(_ properties:[Property]){
+        fileprivate init(_ properties:Properties){
             properties.forEach { p in
                 switch p{
                 case .sessionExpiryInterval(let uint):
@@ -665,8 +622,8 @@ extension Properties{
                 }
             }
         }
-        var properties:[Property]{
-            var result = [Property]()
+        public var properties:Properties{
+            var result = Properties()
             if let authenticationMethod{
                 result.append(.authenticationMethod(authenticationMethod))
             }

@@ -9,7 +9,7 @@ import Promise
 
 
 extension MQTT{
-    struct Task{
+    class Task{
         let promise:Promise<Packet>
         var sendPacket: any Packet
         init(_ packet:Packet){

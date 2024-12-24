@@ -12,6 +12,7 @@ import Promise
 final class Socket:@unchecked Sendable{
     internal let queue:DispatchQueue
     internal var retrier:Retrier?
+    internal var statusChanged:(((new:MQTT.Status,old:MQTT.Status))->Void)?
     private let lock = Lock()
     private var nw:NWConnection?
     private let endpoint:NWEndpoint
@@ -23,16 +24,19 @@ final class Socket:@unchecked Sendable{
     private var authTask:MQTT.Task?
     private var reader:Reader?
     private var retrying:Bool = false
-    private var version:MQTT.Version = .v5_0
     private var openTask:Promise<Packet>?
-    private var config:MQTT.Config?
-    private var connProperties:Properties = .init()
-    private var will:Message?
-    init(_ version:MQTT.Version,endpoint:NWEndpoint,params:NWParameters ){
-        self.version = version
+    private let config:MQTT.Config
+    private var version:MQTT.Version { config.version }
+    
+    private var packet:ConnectPacket?
+    init(_ config:MQTT.Config,endpoint:NWEndpoint,params:NWParameters ){
+        self.config = config
         self.endpoint = endpoint
         self.params = params
         self.queue = DispatchQueue.init(label: "swift.mqtt.queue")
+        if config.pingEnabled{
+            self.pinging = Pinging(self, timeout: config.pingTimeout, interval: .init(config.keepAlive))
+        }
     }
     deinit {
         self.pinging?.suspend()
@@ -60,11 +64,11 @@ final class Socket:@unchecked Sendable{
                 case .closing:
                     self.pinging?.suspend()
                 }
-                self.notify(status: status, old: oldValue)
+                self.statusChanged?((new:status,old:oldValue))
             }
         }
     }
-    func open(config:MQTT.Config,properties:Properties = .init() ,will:Message? = nil)->Promise<Packet>{
+    func open(packet:ConnectPacket)->Promise<Packet>{
         self.lock.lock(); defer { self.lock.unlock() }
         switch self.status{
         case .opened:
@@ -74,29 +78,16 @@ final class Socket:@unchecked Sendable{
         default:
             break
         }
-        self.config = config
-        self.connProperties = properties
-        self.will = will
-        
+        self.packet = packet
         self.status = .opening
         self.resume()
         let promise = Promise<Packet>()
         self.openTask = promise
         return promise
     }
-    private func reopen(){
-        self.lock.lock(); defer { self.lock.unlock() }
-        switch self.status{
-        case .opened:
-            return
-        case .opening:
-            return
-        default:
-            break
-        }
-        self.status = .opening
-        self.resume()
-    }
+//    func close(packet:DisconnectPacket)->Promise<Void>{
+//        
+//    }
     /// Close network connection diirectly
     func directClose(_ code:ReasonCode = .success,reason:MQTT.CloseReason? = nil){
         self.lock.lock(); defer { self.lock.unlock() }
@@ -119,52 +110,64 @@ final class Socket:@unchecked Sendable{
 //            }
 //        }
     }
+    
+    private func reopen(){
+        self.lock.lock(); defer { self.lock.unlock() }
+        switch self.status{
+        case .opened:
+            return
+        case .opening:
+            return
+        default:
+            break
+        }
+        self.status = .opening
+        self.resume()
+    }
+    /// Called by the underlying `NWConnection` when its internal state has changed.
     private func handle(state:NWConnection.State){
         switch state{
         case .cancelled:
+            // This is the network telling us we're closed. We don't need to actually do anything here
+            // other than check our state is ok.
             self.status = .closed(.success)
         case .failed(let error):
+            // The connection has failed for some reason.
             self.tryClose(code: .unspecifiedError, reason: .error(error))
-        case .ready://wen network ready send connect frame
+        case .ready:
+            // Transitioning to ready means the connection was succeeded. Hooray!
             self.doReady()
         case .preparing:
+            // This just means connections are being actively established. We have no specific action
+            // here.
             self.status = .opening
         case .setup:
             self.status = .closed(.success)
         case .waiting(let error):
-            switch error{
-            case .dns(let type):
-                print("dns type:",type)
-            case .posix(let code):
-                print("posix code:",code)
-            case .tls(let status):
-                print("tls status:",status)
-            @unknown default:
-                print("@unknown error")
+            if case .opening = self.status {
+                // This means the connection cannot currently be completed. We should notify the pipeline
+                // here, or support this with a channel option or something, but for now for the sake of
+                // demos we will just allow ourselves into this stage.tage.
+                // But let's not worry about that right now. so noting happend
             }
-            print(error)
-//            Logger.debug("connection wating error = \(error.debugDescription)")
-//            self.tryClose(code: .unspecifiedError, reason: .error(error))
-        @unknown default:
-            break
+            // In this state we've transitioned into waiting, presumably from active or closing. In this
+            // version of NIO this is an error, but we should aim to support this at some stage.
+            MQTT.Logger.debug("connection wating error = \(error.debugDescription)")
+            self.tryClose(code: .unspecifiedError, reason: .error(error))
+        default:
+            // This clause is here to help the compiler out: it's otherwise not able to
+            // actually validate that the switch is exhaustive. Trust me, it is.
+            fatalError("Unreachable")
         }
     }
+        
     private func doReady(){
-        guard let config else{
+        guard let packet else{
             return
         }
-        let packet = ConnectPacket.init(
-            cleanSession: config.cleanSession,
-            keepAliveSeconds: config.keepAlive,
-            clientId: config.clientId,
-            username: config.username,
-            password: config.password,
-            properties: self.connProperties,
-            will: self.will)
-        
         self.sendPacket(packet).then { packet in
-            self.connTask?.done(with: packet)
-            self.connTask = nil
+            self.openTask?.done(packet)
+            self.openTask = nil
             guard let connack = packet as? ConnackPacket else {
                 return
             }
@@ -210,29 +213,14 @@ final class Socket:@unchecked Sendable{
     }
     private func resume(){
         let conn = NWConnection(to: endpoint, using: params)
-        conn.stateUpdateHandler = {state in
-            self.handle(state: state)
-        }
+        conn.stateUpdateHandler = self.handle(state:)
         conn.start(queue: queue)
         self.nw = conn
         self.reader = Reader(self, conn: conn, version: version)
     }
-    private func notify(status:MQTT.Status,old:MQTT.Status){
-//        self.queue.async {
-//            self.delegate?.mqtt(self, didUpdate: status,prev: old)
-//        }
-    }
-    private func notify(error:Error){
-//        self.queue.async {
-//            self.delegate?.mqtt(self, didReceive: error)
-//        }
-    }
 }
 extension Socket{
-    func updatePing(){
-        guard let config else{
-            return
-        }
+    func resetPing(){
         self.pinging = Pinging(self, timeout: config.pingTimeout, interval: TimeInterval(config.keepAlive))
         self.pinging?.resume()
     }
@@ -343,8 +331,20 @@ extension Socket:ReaderDelegate{
                 task.done(with: packet)
                 self.connTask = nil
             }
-        case .PINGREQ:
+        case .PINGRESP:
             self.pinging?.onPong()
+        case .PUBLISH:
+            if let pubpkg = packet as? PublishPacket{
+                if pubpkg.message.qos == .atLeastOnce{
+                    self.sendNoWait(PubackPacket(id: pubpkg.id, type: .PUBACK))
+                }else if pubpkg.message.qos == .exactlyOnce{
+                    self.sendPacket(PubackPacket(id: pubpkg.id, type: .PUBREC))
+                }
+            }
+        case .PUBREL:
+            if let pubrel = packet as? PubackPacket{
+                self.sendNoWait(PubackPacket(id: pubrel.id, type: .PUBCOMP))
+            }
         default:
             guard let task = self.allTasks[packet.id] else{
                 return
