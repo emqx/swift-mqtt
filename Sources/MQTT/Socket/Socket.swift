@@ -13,13 +13,15 @@ final class Socket:@unchecked Sendable{
     internal let queue:DispatchQueue
     internal var retrier:Retrier?
     internal var statusChanged:(((new:MQTT.Status,old:MQTT.Status))->Void)?
+    internal var onMessage:((Message)->Void)?
     private let lock = Lock()
     private var nw:NWConnection?
     private let endpoint:NWEndpoint
     private let params:NWParameters
     private var pinging:Pinging?
     private var monitor:Monitor?
-    private var allTasks:[UInt16:MQTT.Task] = [:]
+    private var activeTasks:[UInt16:MQTT.Task] = [:] // active workflow tasks
+    private var passiveTasks:[UInt16:MQTT.Task] = [:] // passive workflow tasks
     private var connTask:MQTT.Task?
     private var authTask:MQTT.Task?
     private var reader:Reader?
@@ -263,34 +265,44 @@ extension Socket{
             return Promise<Void>(error)
         }
     }
+    
     @discardableResult
     func sendPacket(_ packet: Packet,timeout:UInt64 = 5000)->Promise<Packet> {
         guard self.status == .opened || packet.type == .CONNECT else{
-            return .init(MQTTError.noConnection)
+            return Promise<Packet>(MQTTError.noConnection)
         }
         let task = MQTT.Task(packet)
         switch packet.type{
-        case .CONNECT:
+        case .CONNECT: /// send `CONNECT` is active workflow but packetId is zero
             self.connTask = task
-        case .AUTH:
+        case .AUTH: /// send `AUTH` is active workflow but packetId is zero
             self.authTask = task
-        default:
-            if packet.id>0{
-                self.allTasks[packet.id] = task
-            }
+        case .PUBREC: /// send `PUBREC` is passive workflow so put it into `passiveTasks`
+            self.passiveTasks[packet.id] = task
+        ///send  these packets  is active workflow so put it into `passiveTasks`
+        case .PUBLISH,.PUBREL,.PINGREQ,.SUBSCRIBE,.UNSUBSCRIBE:
+            self.activeTasks[packet.id] = task
+        case .PUBACK,.PUBCOMP: /// send `PUBACK` `PUBCOMP` is passive workflow but we will `sendNoWait` so error here
+            break
+        case .PINGREQ,.DISCONNECT: /// send `PINGREQ` `DISCONNECT` is active workflow but we will `sendNoWait` so error here
+            break
+        case .CONNACK,.SUBACK,.UNSUBACK,.PINGRESP: ///client never send them
+            break
         }
         do {
             MQTT.Logger.debug("SEND: \(packet)")
             var buffer = DataBuffer()
             try packet.write(version: version, to: &buffer)
-            self.send(data: buffer.data, timeout: timeout)
+            return self.send(data: buffer.data, timeout: timeout).then { _ in
+                return task.start(timeout)
+            }
         } catch {
-            return .init(error)
+            return Promise<Packet>(error)
         }
-        return task.promise
+        
     }
     @discardableResult
-    private func send(data:Data,timeout:UInt64 = 5000)->Promise<Void>{
+    private func send(data:Data,timeout:UInt64)->Promise<Void>{
         guard let conn = self.nw else{
             return .init(MQTTError.noConnection)
         }
@@ -307,6 +319,46 @@ extension Socket{
     }
 }
 extension Socket:ReaderDelegate{
+    /// Respond to PUBREL message by sending PUBCOMP. Do this separate from `ackPublish` as the broker might send
+    /// multiple PUBREL messages, if the client is slow to respond
+    private func ackPubrel(_ packet: PubackPacket){
+        self.sendNoWait(PubackPacket(id: packet.id, type: .PUBCOMP))
+    }
+    /// Respond to PUBLISH message
+    /// If QoS is `.atMostOnce` then no response is required
+    /// If QoS is `.atLeastOnce` then send PUBACK
+    /// If QoS is `.exactlyOnce` then send PUBREC, wait for PUBREL and then respond with PUBCOMP (in `ackPubrel`)
+    private func ackPublish(_ pubpkg: PublishPacket) {
+        switch pubpkg.message.qos {
+        case .atMostOnce:
+            self.onMessage?(pubpkg.message)
+        case .atLeastOnce:
+            self.sendNoWait(PubackPacket(id:pubpkg.id,type: .PUBACK)).then { _ in
+                self.onMessage?(pubpkg.message)
+            }
+        case .exactlyOnce:
+            self.sendPacket(PubackPacket(id:pubpkg.id,type: .PUBREC))
+                .then { newpkg in
+                    // if we have received the PUBREL we can process the published message. PUBCOMP is sent by `ackPubrel`
+                    if newpkg.type == .PUBREL {
+                        return pubpkg.message
+                    }
+                    if  let newmsg = (newpkg as? PublishPacket)?.message {
+                        // if we receive a publish message while waiting for a PUBREL from broker
+                        // then replace data to be published and retry PUBREC. PUBREC is sent by self `ackPublish`
+                        // but there wo do noting because task will be replace by the same packetId
+                        // so never happen here
+                    }
+                    throw MQTTError.unexpectedMessage
+                }
+                .then{ msg in
+                    self.onMessage?(msg)
+                }
+        }
+    }
+
+    
+
     func readCompleted(_ reader: Reader) {
         
     }
@@ -314,56 +366,81 @@ extension Socket:ReaderDelegate{
         MQTT.Logger.debug("RECV: \(error)")
     }
     func reader(_ reader: Reader, didReceive packet: any Packet) {
-        MQTT.Logger.debug("RECV: \(packet)")
         switch packet.type{
-        case .DISCONNECT:
-            self.tryClose(code: (packet as! DisconnectPacket).reason , reason: .server)
-        case .AUTH:
-            if let task = self.authTask{
-                task.done(with: packet)
-                self.authTask = nil
-            }else if let task = self.connTask{
-                task.done(with: packet)
-                self.connTask = nil
-            }
-        case .CONNACK:
-            if let task = self.connTask{
-                task.done(with: packet)
-                self.connTask = nil
-            }
+        //----------------------------------no need callback--------------------------------------------
         case .PINGRESP:
             self.pinging?.onPong()
+        case .DISCONNECT:
+//            let disconnectMessage = packet as! DisconnectPacket
+//            let ack = AckV5(reason: disconnectMessage.reason, properties: disconnectMessage.properties)
+            self.tryClose(code: (packet as! DisconnectPacket).reason , reason: .server)
+        //----------------------------------need callback by packet type----------------------------------
+        case .CONNACK:
+            self.doneConnTask(with: packet)
+        case .AUTH:
+            self.doneAuthTask(with: packet)
+        // --------------------------------need callback by packetId-------------------------------------
         case .PUBLISH:
-            if let pubpkg = packet as? PublishPacket{
-                if pubpkg.message.qos == .atLeastOnce{
-                    self.sendNoWait(PubackPacket(id: pubpkg.id, type: .PUBACK))
-                }else if pubpkg.message.qos == .exactlyOnce{
-                    self.sendPacket(PubackPacket(id: pubpkg.id, type: .PUBREC))
-                }
-            }
+            self.ackPublish(packet as! PublishPacket)
+            self.donePassiveTask(with: packet)
         case .PUBREL:
-            if let pubrel = packet as? PubackPacket{
-                self.sendNoWait(PubackPacket(id: pubrel.id, type: .PUBCOMP))
-            }
-        default:
-            guard let task = self.allTasks[packet.id] else{
-                return
-            }
-            task.done(with: packet)
-            self.allTasks.removeValue(forKey: packet.id)
+            self.ackPubrel(packet as! PubackPacket)
+            self.donePassiveTask(with: packet)
+        case .PUBACK:  // when publish qos=1 recv ack from broker
+            self.doneActiveTask(with: packet)
+        case .PUBREC:  // when publish qos=2 recv ack from broker
+            self.doneActiveTask(with: packet)
+        case .PUBCOMP: // when qos=2 recv ack from broker after pubrel(re pubrec)
+            self.doneActiveTask(with: packet)
+        case .SUBACK:  // when subscribe packet send recv ack from broker
+            self.doneActiveTask(with: packet)
+        case .UNSUBACK:// when unsubscribe packet send recv ack from broker
+            self.doneActiveTask(with: packet)
+        // ---------------------------at client we only send them never recv-------------------------------
+        case .CONNECT, .SUBSCRIBE, .UNSUBSCRIBE, .PINGREQ:
+            // MQTTError.unexpectedMessage
+            MQTT.Logger.error("Unexpected MQTT Message:\(packet)")
         }
+    }
+    private func doneConnTask(with packet:Packet){
+        if let task = self.connTask{
+            task.done(with: packet)
+            self.connTask = nil
+        }
+    }
+    private func doneAuthTask(with packet:Packet){
+        if let task = self.authTask{
+            task.done(with: packet)
+            self.authTask = nil
+        }else if let task = self.connTask{
+            task.done(with: packet)
+            self.connTask = nil
+        }
+    }
+    private func doneActiveTask(with packet:Packet){
+        guard let task = self.activeTasks[packet.id] else{
+            /// process packets where no equivalent task was found we only send response to v5 server
+            if case .PUBREC = packet.type,case .v5_0 = self.config.version{
+                self.sendNoWait(PubackPacket(id:packet.id,type: .PUBREL, reason: .packetIdentifierNotFound))
+            }
+            return
+        }
+        task.done(with: packet)
+        self.activeTasks.removeValue(forKey: packet.id)
+    }
+    private func donePassiveTask(with packet:Packet){
+        guard let task = self.passiveTasks[packet.id] else{
+            /// process packets where no equivalent task was found we only send response to v5 server
+            if case .PUBREL = packet.type,case .v5_0 = self.config.version{
+                self.sendNoWait(PubackPacket(id:packet.id,type: .PUBCOMP, reason: .packetIdentifierNotFound))
+            }
+            return
+        }
+        task.done(with: packet)
+        self.passiveTasks.removeValue(forKey: packet.id)
     }
 }
 
-extension Socket{
-    /// connection parameters. Limits set by either client or server
-    struct Params{
-        var maxQoS: MQTTQoS = .exactlyOnce
-        var maxPacketSize: Int?
-        var retainAvailable: Bool = true
-        var maxTopicAlias: UInt16 = 65535
-    }
-}
 extension NWConnection.ContentContext{
     static func `default`(timeout:UInt64)->NWConnection.ContentContext{
         return .init(identifier: "swift-mqtt",expiration: timeout)

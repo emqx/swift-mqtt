@@ -21,13 +21,13 @@ extension MQTT{
     public final class Client: @unchecked Sendable{
         private let socket:Socket
         private var inflight: Inflight = .init()
-        private var connParams = Socket.Params()
+        private var connParams = ConnectParams()
         
         public let config:Config
         public var status:Status { self.socket.status }
         public var isOpened:Bool { self.socket.status == .opened }
         @Atomic
-        private var packetId: UInt16 = 1        
+        private var packetId: UInt16 = 0
         /// Initial v3 client object
         ///
         /// - Parameters:
@@ -40,7 +40,15 @@ extension MQTT{
         }
     }
 }
-
+extension MQTT{
+    /// connection parameters. Limits set by either client or server
+    struct ConnectParams{
+        var maxQoS: MQTTQoS = .exactlyOnce
+        var maxPacketSize: Int?
+        var retainAvailable: Bool = true
+        var maxTopicAlias: UInt16 = 65535
+    }
+}
 extension MQTT.Client{
     
     /// Enabling the retry mechanism
@@ -284,24 +292,23 @@ extension MQTT.Client {
         return connack
     }
    
-    func pubRel(packet: PubackPacket) -> Promise<PubackPacket> {
-        guard socket.status == .opened else { return .init(MQTTError.noConnection) }
+    func pubRel(packet: PubackPacket) -> Promise<AckV5?> {
+        guard socket.status == .opened else {
+            return .init(MQTTError.noConnection)
+        }
         self.inflight.add(packet: packet)
         return self.socket.sendPacket(packet).then{ message in
             guard message.type != .PUBREC else {
                 throw MQTTError.unexpectedMessage
             }
             self.inflight.remove(id: packet.id)
-            guard message.type == .PUBCOMP else {
-                throw MQTTError.unexpectedMessage
-            }
             guard let pubcomp = message as? PubackPacket else{
                 throw MQTTError.unexpectedMessage
             }
             if pubcomp.reason.rawValue > 0x7F {
                 throw MQTTError.reasonError(pubcomp.reason)
             }
-            return pubcomp
+            return AckV5(reason: pubcomp.reason, properties: pubcomp.properties)
         }
     }
     /// Publish message to topic
@@ -342,11 +349,14 @@ extension MQTT.Client {
         return self.socket.sendPacket(packet)
             .then { message -> PubackPacket in
                 self.inflight.remove(id: packet.id)
-                if packet.message.qos == .atLeastOnce {
+                switch packet.message.qos {
+                case .atMostOnce:
+                    throw MQTTError.unexpectedMessage
+                case .atLeastOnce:
                     guard message.type == .PUBACK else {
                         throw MQTTError.unexpectedMessage
                     }
-                } else if packet.message.qos == .exactlyOnce {
+                case .exactlyOnce:
                     guard message.type == .PUBREC else {
                         throw MQTTError.unexpectedMessage
                     }
@@ -361,15 +371,16 @@ extension MQTT.Client {
             }
             .then { puback -> Promise<AckV5?>  in
                 if puback.type == .PUBREC{
-                    return self.pubRel(packet: PubackPacket(id: puback.id,type: .PUBREL)).then { pubcomp in
-                        AckV5(reason: pubcomp.reason, properties: pubcomp.properties)
-                    }
+                    return self.pubRel(packet: PubackPacket(id: puback.id,type: .PUBREL))
                 }
                 return .init(AckV5(reason: puback.reason, properties: puback.properties))
             }
             .catch { error in
                 if case MQTTError.serverDisconnection(let ack) = error, ack.reason == .malformedPacket{
                     self.inflight.remove(id: packet.id)
+                }
+                if case MQTTError.timeout = error{
+                    // how to resend here
                 }
                 throw error
             }
@@ -455,9 +466,7 @@ extension MQTT.Client {
     
     func nextPacketId() -> UInt16 {
         return self.$packetId.write { id in
-            if id == UInt16.max {
-                id = 0
-            }
+            if id == UInt16.max {  id = 0 }
             id += 1
             return id
         }

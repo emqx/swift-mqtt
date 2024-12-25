@@ -31,7 +31,7 @@ let mqtt = {
     m.config.password = "jagat-mqtt-pwd-im"
     m.usingMonitor()
     m.usingRetrier()
-    MQTT.logLevel = .debug
+    MQTT.Logger.level = .debug
     return m
 }()
 extension NWParameters{

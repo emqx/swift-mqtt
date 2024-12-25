@@ -6,38 +6,35 @@
 //
 
 import Foundation
+import Promise
 
 ///
 /// Global MQTT namespace
 ///
 public enum MQTT{ }
 
+
 extension MQTT{
-    nonisolated(unsafe) static var logger:Logger = .init(minLevel: .warning)
-    public static var logLevel:Logger.Level{
-        get {logger.minLevel}
-        set {logger = .init(minLevel: newValue)}
-    }
-    public struct Logger:Sendable{
-        let minLevel: Level
-        private func log(_ level: Level, message: String) {
-            guard level.rawValue >= minLevel.rawValue else { return }
+    public enum Logger:Sendable{
+        nonisolated(unsafe) public static var level:Level = .warning
+        private static func log(_ level: Level, message: String) {
+            guard level.rawValue >= self.level.rawValue else { return }
             print("MQTT(\(level)): \(message)")
         }
         public static func debug(_ message: String) {
-            logger.log(.debug, message: message)
+            log(.debug, message: message)
         }
         public static func info(_ message: String) {
-            logger.log(.info, message: message)
+            log(.info, message: message)
         }
         public static func warning(_ message: String) {
-            logger.log(.warning, message: message)
+            log(.warning, message: message)
         }
         public static func error(_ message: String) {
-            logger.log(.error, message: message)
+            log(.error, message: message)
         }
         public static func error(_ error: Error?){
-            logger.log(.error, message: error.debugDescription)
+            log(.error, message: error.debugDescription)
         }
     }
 }
@@ -62,18 +59,14 @@ extension MQTT{
         case v3_1_1
         var string:String{
             switch self {
-            case .v5_0:
-                return "5.0"
-            case .v3_1_1:
-                return "3.1.1"
+            case .v5_0:  return "5.0"
+            case .v3_1_1: return "3.1.1"
             }
         }
         var byte: UInt8 {
             switch self {
-            case .v3_1_1:
-                return 4
-            case .v5_0:
-                return 5
+            case .v3_1_1: return 4
+            case .v5_0: return 5
             }
         }
     }
@@ -88,21 +81,52 @@ extension MQTT{
         public var username: String? = nil
         /// MQTT password.
         public var password: String? = nil
-        /// MQTT keep alive period.
-        public var keepAlive: UInt16 = 60{
-            didSet{
-                assert(keepAlive>0, "The keepAlive value must be greater than 0!")
-            }
-        }
         /// timeout for server response
         public var pingTimeout: TimeInterval = 5
         /// enable auto ping
         public var pingEnabled: Bool = true
         /// timeout for connecting to server
         public var connectTimeout: TimeInterval = 5
+        /// MQTT keep alive period.
+        public var keepAlive: UInt16 = 60{
+            didSet{
+                assert(keepAlive>0, "The keepAlive value must be greater than 0!")
+            }
+        }
         init(_ version:Version,clientId:String){
             self.version = version
             self.clientId = clientId
+        }
+    }
+}
+extension MQTT{
+    class Task:@unchecked Sendable{
+        private let promise:Promise<Packet>
+        private var sendPacket: any Packet
+        private var timeoutItem:DispatchWorkItem?
+        init(_ packet:Packet){
+            self.promise = .init()
+            self.sendPacket = packet
+        }
+        func done(with packet: any Packet){
+            self.promise.done(packet)
+            self.timeoutItem?.cancel()
+            self.timeoutItem = nil
+        }
+        func done(with error: any Error){
+            self.promise.done(error)
+            self.timeoutItem?.cancel()
+            self.timeoutItem = nil
+        }
+        func start(_ timeout:UInt64? = nil) -> Promise<Packet>{
+            if let timeout{
+                let item = DispatchWorkItem{
+                    self.promise.done(MQTTError.timeout)
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now()+TimeInterval(timeout), execute: item)
+                self.timeoutItem = item
+            }
+            return self.promise
         }
     }
 }
