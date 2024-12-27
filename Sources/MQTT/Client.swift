@@ -13,7 +13,7 @@ import Promise
 
 public protocol MQTTDelegate:AnyObject{
     func mqtt(_ mqtt: MQTT, didUpdate status:MQTT.Status,prev:MQTT.Status)
-    func mqtt(_ mqtt: MQTT, didReceive error:Message)
+    func mqtt(_ mqtt: MQTT, didReceive error:MQTT.Message)
     func mqtt(_ mqtt: MQTT, didReceive error:Error)
 
 }
@@ -34,9 +34,9 @@ extension MQTT{
         ///   - clientID: Client Identifier
         ///   - endpoint:The network endpoint
         ///   - params: The connection parameters `default` is `.tls`
-        public init(_ clientId: String, endpoint:NWEndpoint,params:NWParameters = .tls) {
+        public init(_ clientId: String, endpoint:Endpoint) {
             self.config = Config(.v3_1_1,clientId:clientId)
-            self.socket = Socket(self.config,endpoint: endpoint, params: params)
+            self.socket = Socket(self.config,endpoint: endpoint)
         }
     }
 }
@@ -75,10 +75,26 @@ extension MQTT.Client{
     }
 }
 extension MQTT.Client{
-    /// Close  gracefully by sending close frame
+    /// Close from server
+    /// - Parameters:
+    ///   - reason: close reason code send to the server
+    /// - Returns: Future waiting on disconnect message to be sent
+    ///
     @discardableResult
-    public func close(_ code:ReasonCode = .success)->Promise<Void>{
-        self.close(packet: DisconnectPacket(reason: code))
+    public func close(_ reason:MQTT.CloseReason = .normalClose)->Promise<Void>{
+        var packet = DisconnectPacket()
+        if case .disconnect(let reasonCode, let properties) = reason{
+            switch config.version {
+            case .v5_0:
+                packet = .init(reason: reasonCode,properties: properties)
+            case .v3_1_1:
+                packet = .init(reason: reasonCode)
+            }
+        }
+        return self.socket.sendNoWait(packet).map { _ in
+            self.socket.directClose(reason: reason)
+            return Promise(())
+        }
     }
     /// Connect to MQTT server
     ///
@@ -102,7 +118,7 @@ extension MQTT.Client{
     ) -> Promise<Bool> {
         
         let message = will.map {
-            Message(
+            MQTT.Message(
                 qos: .atMostOnce,
                 dup: false,
                 topic: $0.topic,
@@ -146,7 +162,7 @@ extension MQTT.Client{
         qos: MQTTQoS  = .atLeastOnce,
         retain: Bool = false
     ) -> Promise<Void> {
-        let message = Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: [])
+        let message = MQTT.Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: [])
         let packetId = self.nextPacketId()
         let packet = PublishPacket(id:packetId,message: message)
         return self.publish(packet: packet).then { _ in }
@@ -255,7 +271,7 @@ extension MQTT.Client {
         switch self.config.version {
         case .v3_1_1:
             if connack.returnCode != 0 {
-                let returnCode = MQTTError.ConnectionReturnValue(rawValue: connack.returnCode) ?? .unrecognizedReturnValue
+                let returnCode = ConnectRetrunCode(rawValue: connack.returnCode) ?? .unrecognizedReturnValue
                 throw MQTTError.connectionError(returnCode)
             }
         case .v5_0:
@@ -319,26 +335,26 @@ extension MQTT.Client {
         // check publish validity
         // check qos against server max qos
         guard self.connParams.maxQoS.rawValue >= packet.message.qos.rawValue else {
-            return .init(MQTTPacketError.qosInvalid)
+            return .init(PacketError.qosInvalid)
         }
         // check if retain is available
         guard packet.message.retain == false || self.connParams.retainAvailable else {
-            return .init(MQTTPacketError.retainUnavailable)
+            return .init(PacketError.retainUnavailable)
         }
         for p in packet.message.properties {
             // check topic alias
             if case .topicAlias(let alias) = p {
                 guard alias <= self.connParams.maxTopicAlias, alias != 0 else {
-                    return .init(MQTTPacketError.topicAliasOutOfRange)
+                    return .init(PacketError.topicAliasOutOfRange)
                 }
             }
             if case .subscriptionIdentifier = p {
-                return .init(MQTTPacketError.publishIncludesSubscription)
+                return .init(PacketError.publishIncludesSubscription)
             }
         }
         // check topic name
         guard !packet.message.topic.contains(where: { $0 == "#" || $0 == "+" }) else {
-            return .init(MQTTPacketError.invalidTopicName)
+            return .init(PacketError.invalidTopicName)
         }
 
         if packet.message.qos == .atMostOnce {
@@ -390,7 +406,7 @@ extension MQTT.Client {
     /// - Returns: Future waiting for subscribe to complete. Will wait for SUBACK message from server
     func subscribe(packet: SubscribePacket) -> Promise<SubackPacket> {
         guard packet.subscriptions.count > 0 else {
-            return .init((MQTTPacketError.atLeastOneTopicRequired))
+            return .init((PacketError.atLeastOneTopicRequired))
         }
         return self.socket.sendPacket(packet).then { ack in
             if let suback = ack as? SubackPacket{
@@ -404,7 +420,7 @@ extension MQTT.Client {
     /// - Returns: Future waiting for subscribe to complete. Will wait for SUBACK message from server
     func unsubscribe(packet: UnsubscribePacket) -> Promise<SubackPacket> {
         guard packet.subscriptions.count > 0 else {
-            return .init((MQTTPacketError.atLeastOneTopicRequired))
+            return .init((PacketError.atLeastOneTopicRequired))
         }
         return self.socket.sendPacket(packet).then { ack in
             if let suback = ack as? SubackPacket{
@@ -412,11 +428,6 @@ extension MQTT.Client {
             }
             throw MQTTError.unexpectedMessage
         }
-    }
-    /// Close  from server
-    /// - Returns: Future waiting on disconnect message to be sent
-    func close(packet: DisconnectPacket) -> Promise<Void> {
-        return self.socket.sendNoWait(packet)
     }
     
     func auth(packet: AuthPacket) -> Promise<Packet> {

@@ -13,11 +13,10 @@ final class Socket:@unchecked Sendable{
     internal let queue:DispatchQueue
     internal var retrier:Retrier?
     internal var statusChanged:(((new:MQTT.Status,old:MQTT.Status))->Void)?
-    internal var onMessage:((Message)->Void)?
+    internal var onMessage:((MQTT.Message)->Void)?
     private let lock = Lock()
     private var nw:NWConnection?
-    private let endpoint:NWEndpoint
-    private let params:NWParameters
+    private let endpoint:MQTT.Endpoint
     private var pinging:Pinging?
     private var monitor:Monitor?
     private var activeTasks:[UInt16:MQTT.Task] = [:] // active workflow tasks
@@ -31,10 +30,9 @@ final class Socket:@unchecked Sendable{
     private var version:MQTT.Version { config.version }
     
     private var packet:ConnectPacket?
-    init(_ config:MQTT.Config,endpoint:NWEndpoint,params:NWParameters ){
+    init(_ config:MQTT.Config,endpoint:MQTT.Endpoint){
         self.config = config
         self.endpoint = endpoint
-        self.params = params
         self.queue = DispatchQueue.init(label: "swift.mqtt.queue")
         if config.pingEnabled{
             self.pinging = Pinging(self, timeout: config.pingTimeout, interval: .init(config.keepAlive))
@@ -45,7 +43,7 @@ final class Socket:@unchecked Sendable{
         self.nw?.forceCancel()
         self.nw = nil
     }
-    var status:MQTT.Status = .closed(.success){
+    var status:MQTT.Status = .closed(.normalClose){
         didSet{
             if oldValue != status {
                 MQTT.Logger.debug("Status changed: \(oldValue) --> \(status)")
@@ -53,14 +51,25 @@ final class Socket:@unchecked Sendable{
                 case .opened:
                     self.retrier?.reset()
                     self.pinging?.resume()
-                case .closed:
+                case .closed(let reason):
                     self.retrier?.reset()
                     self.pinging?.suspend()
                     self.nw = nil
                     if let task = self.openTask{
-                        task.done(MQTTError.connectionError(.accepted))
+                        switch reason{
+                        case .networkError(let error):
+                            task.done(error)
+                        case .connectFail(let code):
+                            task.done(MQTTError.connectionError(code))
+                        case .disconnect(let code, _):
+                            task.done(MQTTError.reasonError(code))
+                        default:
+                            task.done(MQTTError.failedToConnect)
+                        }
                     }
                     self.openTask = nil
+                    self.nw?.cancel()
+                    self.nw = nil
                 case .opening:
                     self.pinging?.suspend()
                 case .closing:
@@ -87,31 +96,8 @@ final class Socket:@unchecked Sendable{
         self.openTask = promise
         return promise
     }
-//    func close(packet:DisconnectPacket)->Promise<Void>{
-//        
-//    }
-    /// Close network connection diirectly
-    func directClose(_ code:ReasonCode = .success,reason:MQTT.CloseReason? = nil){
-        self.lock.lock(); defer { self.lock.unlock() }
-        switch self.status{
-        case .closing,.closed:
-            return
-        default:
-            break
-        }
-        self.tryClose(code: code, reason: reason)
-//        switch self.conn?.state{
-//        case .ready,.canceling:
-//            self.tryClose(code: code, reason: reason)
-//        default:
-//            if let scode = code.server{
-//                self.status = .closing
-//                self.conn?.cancel()
-//            }else{
-//                self.tryClose(code: code, reason: reason)
-//            }
-//        }
-    }
+
+    
     
     private func reopen(){
         self.lock.lock(); defer { self.lock.unlock() }
@@ -132,10 +118,10 @@ final class Socket:@unchecked Sendable{
         case .cancelled:
             // This is the network telling us we're closed. We don't need to actually do anything here
             // other than check our state is ok.
-            self.status = .closed(.success)
+            self.status = .closed(.normalClose)
         case .failed(let error):
             // The connection has failed for some reason.
-            self.tryClose(code: .unspecifiedError, reason: .error(error))
+            self.tryClose(reason: .networkError(error))
         case .ready:
             // Transitioning to ready means the connection was succeeded. Hooray!
             self.doReady()
@@ -144,7 +130,8 @@ final class Socket:@unchecked Sendable{
             // here.
             self.status = .opening
         case .setup:
-            self.status = .closed(.success)
+            /// inital state
+            self.status = .closed(.normalClose)
         case .waiting(let error):
             if case .opening = self.status {
                 // This means the connection cannot currently be completed. We should notify the pipeline
@@ -155,7 +142,7 @@ final class Socket:@unchecked Sendable{
             // In this state we've transitioned into waiting, presumably from active or closing. In this
             // version of NIO this is an error, but we should aim to support this at some stage.
             MQTT.Logger.debug("connection wating error = \(error.debugDescription)")
-            self.tryClose(code: .unspecifiedError, reason: .error(error))
+            self.tryClose(reason: .networkError(error))
         default:
             // This clause is here to help the compiler out: it's otherwise not able to
             // actually validate that the switch is exhaustive. Trust me, it is.
@@ -179,31 +166,59 @@ final class Socket:@unchecked Sendable{
         }
         self.reader?.start()
     }
+    /// Close network connection diirectly
+    func directClose(reason:MQTT.CloseReason){
+        self.lock.lock(); defer { self.lock.unlock() }
+        switch self.status{
+        case .opened,.opening:
+            if case .ready = self.nw?.state{
+                self.status = .closing
+                self.nw?.cancel()
+            }else{
+                self.status = .closed(reason)
+            }
+        case .closing,.closed:
+            break
+        }
+    }
     /// Internal method run in delegate queue
     /// try close when no need retry
-    private func tryClose(code:ReasonCode,reason:MQTT.CloseReason?){
-        MQTT.Logger.debug("Try close code:\(code),reason:\(reason.debugDescription)")
+    private func tryClose(reason:MQTT.CloseReason?){
+        MQTT.Logger.debug("Try close reason:\(reason.debugDescription)")
         if self.retrying{
-            return
-        }
-        // not retry when network unsatisfied
-        if let monitor = self.monitor, monitor.status == .unsatisfied{
-            status = .closed(code,reason)
             return
         }
         // not retry when reason is nil(close no reason)
         guard let reason else{
-            status = .closed(code, nil)
+            status = .closed(.normalClose)
             return
         }
+        // posix network unreachable
+        // check your borker address is reachable
+        // the monitor just known internet is reachable
+        if case .networkError(let err) = reason,case .posix(let posix) = err{
+            switch posix{
+            case .ENETUNREACH,.ENETDOWN:
+                self.status = .closed(reason)
+                return
+            default:
+                break
+            }
+        }
+        // not retry when network unsatisfied
+        if let monitor = self.monitor, monitor.status == .unsatisfied{
+            status = .closed(reason)
+            return
+        }
+        
         // not retry when retrier is nil
         guard let retrier = self.retrier else{
-            status = .closed(code,reason)
+            status = .closed(reason)
             return
         }
         // not retry when limits
-        guard let delay = retrier.retry(when: reason, code: code) else{
-            status = .closed(code,reason)
+        guard let delay = retrier.retry(when: reason) else{
+            status = .closed(reason)
             return
         }
         self.retrying = true
@@ -214,7 +229,8 @@ final class Socket:@unchecked Sendable{
         }
     }
     private func resume(){
-        let conn = NWConnection(to: endpoint, using: params)
+        let params = endpoint.params()
+        let conn = NWConnection(to: params.0, using: params.1)
         conn.stateUpdateHandler = self.handle(state:)
         conn.start(queue: queue)
         self.nw = conn
@@ -240,11 +256,11 @@ extension Socket{
             guard let self else { return }
             switch new{
             case .satisfied:
-                if case let .closed(_, reason) = self.status, reason != nil{
+                if case let .closed = self.status{
                     self.reopen()
                 }
             case .unsatisfied:
-                self.directClose(reason: .monitor)
+                self.directClose(reason: .unsatisfied)
             default:
                 break
             }
@@ -256,6 +272,9 @@ extension Socket{
 extension Socket{
     @discardableResult
     func sendNoWait(_ packet: Packet,timeout:UInt64 = 5000)->Promise<Void> {
+        guard self.status == .opened else{
+            return Promise<Void>(MQTTError.noConnection)
+        }
         do {
             MQTT.Logger.debug("SEND: \(packet)")
             var buffer = DataBuffer()
@@ -360,20 +379,20 @@ extension Socket:ReaderDelegate{
     
 
     func readCompleted(_ reader: Reader) {
-        
+        self.directClose(reason: .normalClose)
     }
     func reader(_ reader: Reader, didReceive error: any Error) {
         MQTT.Logger.debug("RECV: \(error)")
     }
     func reader(_ reader: Reader, didReceive packet: any Packet) {
+        MQTT.Logger.debug("RECV: \(packet)")
         switch packet.type{
         //----------------------------------no need callback--------------------------------------------
         case .PINGRESP:
             self.pinging?.onPong()
         case .DISCONNECT:
-//            let disconnectMessage = packet as! DisconnectPacket
-//            let ack = AckV5(reason: disconnectMessage.reason, properties: disconnectMessage.properties)
-            self.tryClose(code: (packet as! DisconnectPacket).reason , reason: .server)
+            let disconnect = packet as! DisconnectPacket
+            self.tryClose(reason: .disconnect(disconnect.reason,disconnect.properties))
         //----------------------------------need callback by packet type----------------------------------
         case .CONNACK:
             self.doneConnTask(with: packet)
@@ -446,3 +465,4 @@ extension NWConnection.ContentContext{
         return .init(identifier: "swift-mqtt",expiration: timeout)
     }
 }
+

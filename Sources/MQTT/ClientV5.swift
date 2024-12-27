@@ -21,8 +21,8 @@ extension MQTT{
         ///   - clientID: Client Identifier
         ///   - endpoint:The network endpoint
         ///   - params: The connection parameters `default` is `.tls`
-        public init(_ clientId: String, endpoint:NWEndpoint,params:NWParameters = .tls) {
-            self.client = Client(clientId, endpoint: endpoint,params: params)
+        public init(_ clientId: String, endpoint:Endpoint) {
+            self.client = Client(clientId, endpoint: endpoint)
             self.client.config.version = .v5_0
         }
     }
@@ -83,7 +83,7 @@ extension MQTT.ClientV5{
     ///     received. QoS1 and above return an `MQTTAckV5` which contains a `reason` and `properties`
     @discardableResult
     public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<AckV5?> {
-        let message = Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: properties)
+        let message = MQTT.Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: properties)
         let packet = PublishPacket(id: client.nextPacketId(),message: message)
         return client.publish(packet: packet)
     }
@@ -168,7 +168,7 @@ extension MQTT.ClientV5{
     ) -> Promise<ConnackV5> {
         
         let publish = will.map {
-            Message(
+            MQTT.Message(
                 qos: .atMostOnce,
                 dup: false,
                 topic: $0.topic,
@@ -197,13 +197,12 @@ extension MQTT.ClientV5{
     }
     /// Close from server
     /// - Parameters:
-    ///   - code: close reason code send to the server
-    ///   - properties: properties to attach to disconnect packet
+    ///   - reason: close reason code send to the server
     /// - Returns: Future waiting on disconnect message to be sent
     ///
     @discardableResult
-    public func close(_ code:ReasonCode = .success,properties:Properties = [])->Promise<Void>{
-        self.client.close(packet: DisconnectPacket(reason: code,properties: properties))
+    public func close(_ reason:MQTT.CloseReason = .normalClose)->Promise<Void>{
+        self.client.close(reason)
     }
     /// Re-authenticate with server
     ///

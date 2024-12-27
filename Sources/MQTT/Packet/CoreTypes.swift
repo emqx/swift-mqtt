@@ -7,58 +7,38 @@
 
 import Foundation
 
+extension MQTT{
+    /// MQTT PUBLISH packet parameters.
+    public struct Message: Sendable {
+        /// Quality of Service for message.
+        public let qos: MQTTQoS
+        
+        /// Whether this is a duplicate publish message.
+        public let dup: Bool
 
+        /// Topic name on which the message is published.
+        public let topic: String
+        
+        /// Whether this is a retained message.
+        public let retain: Bool
+        
+        /// Message payload.
+        public let payload: Data
 
+        /// MQTT v5 properties
+        public let properties: Properties
 
-
-/// MQTT Packet type enumeration
-public enum PacketType: UInt8, Sendable {
-    case CONNECT = 0x10
-    case CONNACK = 0x20
-    case PUBLISH = 0x30
-    case PUBACK = 0x40
-    case PUBREC = 0x50
-    case PUBREL = 0x62
-    case PUBCOMP = 0x70
-    case SUBSCRIBE = 0x82
-    case SUBACK = 0x90
-    case UNSUBSCRIBE = 0xA2
-    case UNSUBACK = 0xB0
-    case PINGREQ = 0xC0
-    case PINGRESP = 0xD0
-    case DISCONNECT = 0xE0
-    case AUTH = 0xF0
-}
-
-/// MQTT PUBLISH packet parameters.
-public struct Message: Sendable {
-    /// Quality of Service for message.
-    public let qos: MQTTQoS
-    
-    /// Whether this is a duplicate publish message.
-    public let dup: Bool
-
-    /// Topic name on which the message is published.
-    public let topic: String
-    
-    /// Whether this is a retained message.
-    public let retain: Bool
-    
-    /// Message payload.
-    public let payload: Data
-
-    /// MQTT v5 properties
-    public let properties: Properties
-
-    init(qos: MQTTQoS, dup: Bool, topic: String, retain: Bool, payload: Data, properties: Properties) {
-        self.qos = qos
-        self.dup = dup
-        self.topic = topic
-        self.retain = retain
-        self.payload = payload
-        self.properties = properties
+        init(qos: MQTTQoS, dup: Bool, topic: String, retain: Bool, payload: Data, properties: Properties) {
+            self.qos = qos
+            self.dup = dup
+            self.topic = topic
+            self.retain = retain
+            self.payload = payload
+            self.properties = properties
+        }
     }
 }
+
 
 /// MQTT SUBSCRIBE packet parameters.
 public struct Subscribe: Sendable {
@@ -72,18 +52,17 @@ public struct Subscribe: Sendable {
         self.qos = qos
         self.topicFilter = topicFilter
     }
+    /// Retain handling options
+    public enum RetainHandling: UInt8, Sendable {
+        /// always send retain message
+        case sendAlways = 0
+        /// send retain if new
+        case sendIfNew = 1
+        /// do not send retain message
+        case doNotSend = 2
+    }
     /// MQTT v5 SUBSCRIBE packet parameters.
     public struct V5: Sendable {
-        /// Retain handling options
-        public enum RetainHandling: UInt8, Sendable {
-            /// always send retain message
-            case sendAlways = 0
-            /// send retain if new
-            case sendIfNew = 1
-            /// do not send retain message
-            case doNotSend = 2
-        }
-
         /// Topic filter to subscribe to.
         public let topicFilter: String
 
@@ -160,7 +139,7 @@ public struct ConnackV5: Sendable {
 }
 
 /// MQTT v5 ACK information. Returned with PUBACK, PUBREL
-public struct AckV5: Sendable {
+public struct AckV5: Sendable,Equatable {
     /// MQTT v5 reason code
     public let reason: ReasonCode
     /// MQTT v5 properties

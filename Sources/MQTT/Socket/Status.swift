@@ -91,74 +91,49 @@ import Network
 //};
 
 extension MQTT{
+    
     /// state machine
     public enum Status:Sendable,Equatable,CustomStringConvertible{
         case opened
         case opening
         case closing
-        case closed(ReasonCode,CloseReason? = nil)
+        case closed(CloseReason)
         public var description: String{
             switch self{
             case .opening: return "opening"
             case .closing: return "closing"
             case .opened:  return "opened"
-            case let .closed(code, reason):
-                if let reason{
-                    return "closed-\(code)-\(reason)"
-                }
-                return "closed-\(code)"
+            case .closed:  return "closed"
+            }
+        }
+    }
+    ///  close reason
+    public enum CloseReason:Sendable,Equatable,CustomStringConvertible{
+        /// recv server disconnect packet or send disconnect packet
+        case disconnect(ReasonCode,Properties)
+        /// normal cllose default state
+        case normalClose
+        /// close when ping timeout
+        case pingTimeout
+        /// auto close by network monitor when network unsatisfied
+        case unsatisfied
+        /// decode or encode packet error
+        case decodeError(DecodeError)
+        /// connect fail with retrun code
+        case connectFail(ConnectRetrunCode)
+        /// close when network error.
+        case networkError(NWError)
+        public var description: String{
+            switch self{
+            case .disconnect(let code,_):   return "close packet code:\(code)"
+            case .normalClose: return "normal close"
+            case .unsatisfied: return "network unsatisfied"
+            case .pingTimeout: return "ping timeout"
+            case .decodeError(let error): return error.localizedDescription
+            case .connectFail(let code):  return "connect error code:\(code)"
+            case .networkError(let error): return error.localizedDescription
             }
         }
     }
     
-    public enum CloseCode: UInt8,RawRepresentable,Codable,Equatable,Hashable{
-       case normalDisconnection = 0x00
-       case disconnectWithWillMessage = 0x04
-       case unspecifiedError = 0x80
-       case malformedPacket = 0x81
-       case protocolError = 0x82
-       case implementationSpecificError = 0x83
-       case notAuthorized = 0x87
-       case serverBusy = 0x89
-       case serverShuttingDown = 0x8B
-       case keepAliveTimeout = 0x8D
-       case sessionTakenOver = 0x8E
-       case topicFilterInvalid = 0x8F
-       case topicNameInvalid = 0x90
-       case receiveMaximumExceeded = 0x93
-       case topicAliasInvalid = 0x94
-       case packetTooLarge = 0x95
-       case messageRateTooHigh = 0x96
-       case quotaExceeded = 0x97
-       case administrativeAction = 0x98
-       case payloadFormatInvalid = 0x99
-       case retainNotSupported = 0x9A
-       case qosNotSupported = 0x9B
-       case useAnotherServer = 0x9C
-       case serverMoved = 0x9D
-       case sharedSubscriptionsNotSupported = 0x9E
-       case connectionRateExceeded = 0x9F
-       case maximumConnectTime = 0xA0
-       case subscriptionIdentifiersNotSupported = 0xA1
-       case wildcardSubscriptionsNotSupported = 0xA2
-   }
-    /// WehSocket close reason
-    public enum CloseReason:Sendable,Equatable,CustomStringConvertible{
-        /// close when ping pong fail
-        case pinging
-        /// auto close by network monitor when network unsatisfied
-        case monitor
-        /// close when network error.
-        case error(_ error:NWError)
-        /// server reason data
-        case server
-        public var description: String{
-            switch self{
-            case .monitor: return "monitor"
-            case .pinging: return "pinging"
-            case .error(let error): return error.localizedDescription
-            case .server: return "server"
-            }
-        }
-    }
 }

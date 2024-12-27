@@ -9,7 +9,6 @@ import MQTTNIO
 import MQTT
 import CocoaMQTT
 import Foundation
-import Network
 
 let client = MQTTClient()
 //let mqtt = {
@@ -23,10 +22,23 @@ let client = MQTTClient()
 //    m.delegate = client
 //    return m
 //}()
+
 let mqtt = {
-    let params = NWParameters.tls
-    let endpoint = NWEndpoint.hostPort(host: "broker.beta.jagat.io", port: 1883)
-    let m = MQTT.ClientV5("swift-mqtt", endpoint: endpoint, params: .tcp)
+    var options = TLS.Options()
+    if let file = Bundle.main.path(forResource: "client", ofType: "p12"){
+        do {
+            options.credential = try .create(from: file, passwd: "123456")
+        } catch  {
+            print(error)
+        }
+    }
+    options.verify = .trustAll
+    options.serverName = "docs"
+    options.minVersion = .v1_3
+    options.maxVersion = .v1_3
+    options.quicOptions = .init()
+    options.quicOptions?.isDatagram = true
+    let m = MQTT.ClientV5("swift-mqtt", endpoint: .quic(host: "docs.lerjin.com",options: options))
     m.config.username = "jagat-mqtt-pwd-im"
     m.config.password = "jagat-mqtt-pwd-im"
     m.usingMonitor()
@@ -34,26 +46,7 @@ let mqtt = {
     MQTT.Logger.level = .debug
     return m
 }()
-extension NWParameters{
-    var isTCP:Bool{
-        if let _ = self.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options{
-            return true
-        }
-        return false
-    }
-    var isUDP:Bool{
-        if let _ = self.defaultProtocolStack.transportProtocol as? NWProtocolUDP.Options{
-            return true
-        }
-        return false
-    }
-    var isQUIC:Bool{
-        if let _ = self.defaultProtocolStack.transportProtocol as? NWProtocolQUIC.Options{
-            return true
-        }
-        return false
-    }
-}
+
 //let mqtt = {
 //    let params = NWParameters.tls
 //    let endpoint = NWEndpoint.hostPort(host: "broker.beta.jagat.io", port: 1883)

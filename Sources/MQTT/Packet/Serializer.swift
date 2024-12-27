@@ -33,9 +33,9 @@ enum Serializer {
     /// write string to byte buffer
     static func writeString(_ string: String, to byteBuffer: inout DataBuffer) throws {
         guard let data = string.data(using: .utf8) else{
-            throw MQTTPacketError.badParameter
+            throw PacketError.badParameter
         }
-        guard data.count < 65536 else { throw MQTTPacketError.badParameter}
+        guard data.count < 65536 else { throw PacketError.badParameter}
         byteBuffer.writeInteger(UInt16(data.count))
         byteBuffer.writeData(data)
     }
@@ -49,7 +49,7 @@ enum Serializer {
     /// write buffer to byte buffer
     static func writeBuffer(_ buffer: DataBuffer, to byteBuffer: inout DataBuffer) throws {
         let length = buffer.readableBytes
-        guard length < 65536 else { throw MQTTPacketError.badParameter }
+        guard length < 65536 else { throw PacketError.badParameter }
         var buffer = buffer
         byteBuffer.writeInteger(UInt16(length))
         byteBuffer.writeBuffer(&buffer)
@@ -63,7 +63,7 @@ enum Serializer {
     
     /// write data
     static func writeData(_ data: Data, to byteBuffer: inout DataBuffer) throws {
-        guard data.count < 65536 else { throw MQTTPacketError.badParameter }
+        guard data.count < 65536 else { throw PacketError.badParameter }
         byteBuffer.writeInteger(UInt16(data.count))
         byteBuffer.writeData(data)
     }

@@ -1,0 +1,53 @@
+services:
+  emqx1:
+    image: emqx/emqx-enterprise:5.8.3
+    container_name: emqx1
+    environment:
+    - "EMQX_NODE_NAME=emqx@node1.emqx.com"
+    - "EMQX_CLUSTER__DISCOVERY_STRATEGY=static"
+    - "EMQX_CLUSTER__STATIC__SEEDS=[emqx@node1.emqx.com,emqx@node2.emqx.com]"
+    - "EMQX_LISTENERS__QUIC__DEFAULT__keyfile=etc/certs/key.pem"
+    - "EMQX_LISTENERS__QUIC__DEFAULT__certfile=etc/certs/cert.pem"
+    - "EMQX_LISTENERS__QUIC__DEFAULT__ENABLED=true"
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
+      interval: 5s
+      timeout: 25s
+      retries: 5
+    networks:
+      emqx-bridge:
+        aliases:
+        - node1.emqx.com
+    ports:
+      - 1883:1883
+      - 8083:8083
+      - 8084:8084
+      - 8883:8883
+      - 14567:14567/udp
+      - 18083:18083
+      
+    # volumes:
+    #   - $PWD/emqx1_data:/opt/emqx/data
+
+  emqx2:
+    image: emqx/emqx-enterprise:5.8.3
+    container_name: emqx2
+    environment:
+    - "EMQX_NODE_NAME=emqx@node2.emqx.com"
+    - "EMQX_CLUSTER__DISCOVERY_STRATEGY=static"
+    - "EMQX_CLUSTER__STATIC__SEEDS=[emqx@node1.emqx.com,emqx@node2.emqx.com]"
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
+      interval: 5s
+      timeout: 25s
+      retries: 5
+    networks:
+      emqx-bridge:
+        aliases:
+        - node2.emqx.com
+    # volumes:
+    #   - $PWD/emqx2_data:/opt/emqx/data
+
+networks:
+  emqx-bridge:
+    driver: bridge

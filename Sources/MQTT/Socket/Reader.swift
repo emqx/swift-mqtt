@@ -46,7 +46,7 @@ class Reader:@unchecked Sendable{
             if byte & 0x80 != 0{
                 let result = self.multiply.multipliedReportingOverflow(by: 0x80)
                 if result.overflow {
-                    self.delegate?.reader(self, didReceive: Error.lengthOverflow)
+                    self.delegate?.reader(self, didReceive: DecodeError.variableLengthOverflow)
                     return
                 }
                 self.multiply = result.partialValue
@@ -66,7 +66,7 @@ class Reader:@unchecked Sendable{
     }
     private func dispath(data:Data){
         guard let type = PacketType(rawValue: self.header & 0xF0) else {
-            self.delegate?.reader(self, didReceive: Error.unkownFrame(self.header, data))
+            self.delegate?.reader(self, didReceive: DecodeError.unrecognisedPacketType)
             return
         }
         let incoming:IncomingPacket = .init(type: type, flags: self.header & 0xF, remainingData: .init(data: data))
@@ -88,11 +88,11 @@ class Reader:@unchecked Sendable{
                 return
             }
             if let error{
-                self.delegate?.reader(self, didReceive: Error.networkError(error))
+                self.delegate?.reader(self, didReceive: DecodeError.networkError(error))
                 return
             }
             guard let data = content,data.count == length else{
-                self.delegate?.reader(self, didReceive: Error.readLengthError(length, content?.count ?? 0))
+                self.delegate?.reader(self, didReceive: DecodeError.unexpectedDataLength)
                 return
             }
             finish?(data)
@@ -102,11 +102,11 @@ class Reader:@unchecked Sendable{
         conn.receiveMessage {[weak self] content, contentContext, isComplete, error in
             guard let self else{ return }
             if let error{
-                self.delegate?.reader(self, didReceive: Error.networkError(error))
+                self.delegate?.reader(self, didReceive: DecodeError.networkError(error))
                 return
             }
             guard let data = content else{
-                self.delegate?.reader(self, didReceive: MQTTError.badResponse)
+                self.delegate?.reader(self, didReceive: DecodeError.unexpectedDataLength)
                 return
             }
             do {
@@ -125,29 +125,7 @@ class Reader:@unchecked Sendable{
         multiply = 1
     }
 }
-extension Reader{
-    enum Error:Swift.Error,CustomStringConvertible{
-        case serverClosed
-        case lengthOverflow
-        case unkownFrame(UInt8,Data)
-        case networkError(NWError)
-        case readLengthError(Int,Int)
-        var description: String{
-            switch self {
-            case .serverClosed:
-                return "Reader: the server has close the stream"
-            case .lengthOverflow:
-                return "Reader: length overflow"
-            case .readLengthError(let expect, let got):
-                return "Reader: read data length error expect:\(expect),but got:\(got)"
-            case .unkownFrame(let header,let data):
-                return "Reader: unknown frame type, header: \(header), data:\(data)"
-            case .networkError(let error):
-                return "Reader: network error:\(error)"
-            }
-        }
-    }
-}
+
 extension NWConnection{
     var isudp:Bool{
         if let opt = parameters.defaultProtocolStack.transportProtocol,opt is NWProtocolUDP{

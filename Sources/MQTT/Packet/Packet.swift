@@ -12,6 +12,25 @@ enum InternalError: Swift.Error {
     case notImplemented
 }
 
+/// MQTT Packet type enumeration
+enum PacketType: UInt8, Sendable {
+    case CONNECT = 0x10
+    case CONNACK = 0x20
+    case PUBLISH = 0x30
+    case PUBACK = 0x40
+    case PUBREC = 0x50
+    case PUBREL = 0x62
+    case PUBCOMP = 0x70
+    case SUBSCRIBE = 0x82
+    case SUBACK = 0x90
+    case UNSUBSCRIBE = 0xA2
+    case UNSUBACK = 0xB0
+    case PINGREQ = 0xC0
+    case PINGRESP = 0xD0
+    case DISCONNECT = 0xE0
+    case AUTH = 0xF0
+}
+
 /// Protocol for all MQTT packet types
 protocol Packet: CustomStringConvertible, Sendable {
     /// packet type
@@ -73,7 +92,7 @@ struct ConnectPacket: Packet {
     let properties: Properties
 
     /// will published when connected
-    let will: Message?
+    let will: MQTT.Message?
 
     /// write connect packet to bytebuffer
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
@@ -169,7 +188,7 @@ struct PublishPacket: Packet {
     var description: String { "PUBLISH" }
     
     let id: UInt16
-    let message: Message
+    let message: MQTT.Message
 
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
         var flags: UInt8 = self.message.retain ? Flags.retain : 0
@@ -212,7 +231,7 @@ struct PublishPacket: Packet {
         // read payload
         let payload = remainingData.readData(length: remainingData.readableBytes) ?? Data()
         // create publish info
-        let message = Message(
+        let message = MQTT.Message(
             qos: qos,
             dup: packet.flags & Flags.duplicate != 0,
             topic: topicName,

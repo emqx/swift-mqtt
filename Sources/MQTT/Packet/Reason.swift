@@ -13,7 +13,7 @@ import Foundation
 /// Reason codes less than 128 are considered successful. Codes greater than or equal to 128 are considered
 /// a failure. These are returned by CONNACK, PUBACK, PUBREC, PUBREL, PUBCOMP, DISCONNECT and
 /// AUTH packets
-public enum ReasonCode: UInt8, Sendable {
+public enum ReasonCode: UInt8, Sendable,Equatable {
     /// Success (available for all). For SUBACK mean QoS0 is available
     case success = 0
     /// The subscription is accepted and the maximum QoS sent will be QoS 1. This might be a lower QoS than was requested.
@@ -105,4 +105,23 @@ public enum ReasonCode: UInt8, Sendable {
     case wildcardSubscriptionsNotSupported = 162
     /// Reason code was unrecognised
     case unrecognisedReason = 255
+}
+
+
+/// Value returned in connection error
+public enum ConnectRetrunCode: UInt8, Sendable,Equatable {
+    /// connection was accepted
+    case accepted = 0
+    /// The Server does not support the version of the MQTT protocol requested by the Client.
+    case unacceptableProtocolVersion = 1
+    /// The Client Identifier is a valid string but is not allowed by the Server.
+    case identifierRejected = 2
+    /// The MQTT Server is not available.
+    case serverUnavailable = 3
+    /// The Server does not accept the User Name or Password specified by the Client
+    case badUserNameOrPassword = 4
+    /// The client is not authorized to connect
+    case notAuthorized = 5
+    /// Return code was unrecognised
+    case unrecognizedReturnValue = 0xFF
 }

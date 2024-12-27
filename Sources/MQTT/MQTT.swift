@@ -43,6 +43,7 @@ extension MQTT.Logger{
         case debug = 0, info, warning, error, off
     }
 }
+
 /// Indicates the level of assurance for delivery of a packet.
 public enum MQTTQoS: UInt8, Sendable {
     /// fire and forget

@@ -459,7 +459,6 @@ extension Property{
     }
 }
 extension Property{
-    
     public struct Publish{
         public var payloadFormat: UInt8?
         public var messageExpiry: UInt32?
@@ -580,7 +579,6 @@ extension Property{
     }
 }
 extension Property{
-    
     public struct Connect{
         public var sessionExpiryInterval: UInt32?
         public var receiveMaximum: UInt16?

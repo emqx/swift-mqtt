@@ -9,8 +9,9 @@ import Network
 import Foundation
 
 public final class Retrier{
-    /// Retry filter not retry when return true
-    public typealias Filter = @Sendable (ReasonCode,MQTT.CloseReason)->Bool
+    /// Retry filter
+    /// Tell me true if the reason need retry
+    public typealias Filter = @Sendable (MQTT.CloseReason)->Bool
     /// Retry backoff policy
     public enum Policy{
         /// The retry time grows linearly
@@ -49,8 +50,8 @@ public final class Retrier{
         self.times = 0
     }
     /// get retry delay. nil means not retry
-    func retry(when reason:MQTT.CloseReason,code:ReasonCode) -> TimeInterval? {
-        if self.filter?(code,reason) == true {
+    func retry(when reason:MQTT.CloseReason) -> TimeInterval? {
+        if self.filter?(reason) == true {
             return nil
         }
         if times > limits {
@@ -133,7 +134,7 @@ final class Pinging{
     }
     private func checkPong(){
         if !self.pongRecived{
-            self.socket.directClose(reason: .pinging)
+            self.socket.directClose(reason: .pingTimeout)
         }
     }
     private class DelayTask {
