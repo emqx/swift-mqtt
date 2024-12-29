@@ -74,10 +74,10 @@ extension MQTT{
     public class Config{
         /// protocol version init in client
         public internal(set) var version:MQTT.Version
+        /// Version of MQTT server client is connecting to
+        public internal(set)var clientId: String
         /// timeout for server response
         public var timeout: TimeInterval = 5
-        /// Version of MQTT server client is connecting to
-        public var clientId: String
         /// MQTT user name.
         public var username: String? = nil
         /// MQTT password.
@@ -91,7 +91,7 @@ extension MQTT{
         /// MQTT keep alive period.
         public var keepAlive: UInt16 = 60{
             didSet{
-                assert(keepAlive>0, "The keepAlive value must be greater than 0!")
+                assert(keepAlive>0, "keepalive has to be greater than zero!")
             }
         }
         init(_ version:Version,clientId:String){

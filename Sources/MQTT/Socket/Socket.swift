@@ -11,14 +11,14 @@ import Promise
 
 final class Socket:@unchecked Sendable{
     internal let queue:DispatchQueue
-    internal var retrier:Retrier?
+    internal var retrier:MQTT.Retrier?
     internal var statusChanged:(((new:MQTT.Status,old:MQTT.Status))->Void)?
     internal var onMessage:((MQTT.Message)->Void)?
     private let lock = Lock()
     private var nw:NWConnection?
     private let endpoint:MQTT.Endpoint
-    private var pinging:Pinging?
-    private var monitor:Monitor?
+    private var pinging:MQTT.Pinging?
+    private var monitor:MQTT.Monitor?
     private var activeTasks:[UInt16:MQTT.Task] = [:] // active workflow tasks
     private var passiveTasks:[UInt16:MQTT.Task] = [:] // passive workflow tasks
     private var connTask:MQTT.Task?
@@ -35,7 +35,7 @@ final class Socket:@unchecked Sendable{
         self.endpoint = endpoint
         self.queue = DispatchQueue.init(label: "swift.mqtt.queue")
         if config.pingEnabled{
-            self.pinging = Pinging(self, timeout: config.pingTimeout, interval: .init(config.keepAlive))
+            self.pinging = MQTT.Pinging(self, timeout: config.pingTimeout, interval: .init(config.keepAlive))
         }
     }
     deinit {
@@ -239,7 +239,7 @@ final class Socket:@unchecked Sendable{
 }
 extension Socket{
     func resetPing(){
-        self.pinging = Pinging(self, timeout: config.pingTimeout, interval: TimeInterval(config.keepAlive))
+        self.pinging = MQTT.Pinging(self, timeout: config.pingTimeout, interval: TimeInterval(config.keepAlive))
         self.pinging?.resume()
     }
     func usingMonitor(_ enable:Bool){
@@ -251,12 +251,12 @@ extension Socket{
         let monitor = self.monitor ?? newMonitor()
         monitor.start(queue: queue)
     }
-    private func newMonitor()->Monitor{
-        let m = Monitor{[weak self] new in
+    private func newMonitor()->MQTT.Monitor{
+        let m = MQTT.Monitor{[weak self] new in
             guard let self else { return }
             switch new{
             case .satisfied:
-                if case let .closed = self.status{
+                if case .closed = self.status{
                     self.reopen()
                 }
             case .unsatisfied:
@@ -299,7 +299,7 @@ extension Socket{
         case .PUBREC: /// send `PUBREC` is passive workflow so put it into `passiveTasks`
             self.passiveTasks[packet.id] = task
         ///send  these packets  is active workflow so put it into `passiveTasks`
-        case .PUBLISH,.PUBREL,.PINGREQ,.SUBSCRIBE,.UNSUBSCRIBE:
+        case .PUBLISH,.PUBREL,.SUBSCRIBE,.UNSUBSCRIBE:
             self.activeTasks[packet.id] = task
         case .PUBACK,.PUBCOMP: /// send `PUBACK` `PUBCOMP` is passive workflow but we will `sendNoWait` so error here
             break
@@ -362,7 +362,7 @@ extension Socket:ReaderDelegate{
                     if newpkg.type == .PUBREL {
                         return pubpkg.message
                     }
-                    if  let newmsg = (newpkg as? PublishPacket)?.message {
+                    if  let _ = (newpkg as? PublishPacket)?.message {
                         // if we receive a publish message while waiting for a PUBREL from broker
                         // then replace data to be published and retry PUBREC. PUBREC is sent by self `ackPublish`
                         // but there wo do noting because task will be replace by the same packetId

@@ -9,7 +9,7 @@ import Foundation
 
 enum Serializer {
     /// write variable length
-    static func writeVariableLengthInteger(_ value: Int, to byteBuffer: inout DataBuffer) {
+    static func writeVarint(_ value: Int, to byteBuffer: inout DataBuffer) {
         var value = value
         repeat {
             let byte = UInt8(value & 0x7F)
@@ -21,7 +21,7 @@ enum Serializer {
             }
         } while value != 0
     }
-    static func variableLengthIntegerPacketSize(_ value: Int) -> Int {
+    static func varintPacketSize(_ value: Int) -> Int {
         var value = value
         var size = 0
         repeat {
@@ -75,7 +75,7 @@ enum Serializer {
     }
     
     /// read variable length from bytebuffer
-    static func readVariableLengthInteger(from byteBuffer: inout DataBuffer) throws -> Int {
+    static func readVarint(from byteBuffer: inout DataBuffer) throws -> Int {
         var value = 0
         var shift = 0
         repeat {

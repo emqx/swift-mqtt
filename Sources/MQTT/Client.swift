@@ -33,10 +33,31 @@ extension MQTT{
         /// - Parameters:
         ///   - clientID: Client Identifier
         ///   - endpoint:The network endpoint
-        ///   - params: The connection parameters `default` is `.tls`
         public init(_ clientId: String, endpoint:Endpoint) {
             self.config = Config(.v3_1_1,clientId:clientId)
             self.socket = Socket(self.config,endpoint: endpoint)
+        }
+        /// Enabling the retry mechanism
+        ///
+        /// - Parameters:
+        ///    - policy: Retry policcy
+        ///    - limits: max retry times
+        ///    - filter: filter retry when some code and reason
+        ///
+        public func usingRetrier(
+            _ policy:Retrier.Policy = .exponential(),
+            limits:UInt = 10,
+            filter:Retrier.Filter? = nil)
+        {
+            self.socket.retrier = Retrier(policy, limits: limits, filter: filter)
+        }
+        /// Enabling the network mornitor mechanism
+        ///
+        /// - Parameters:
+        ///    - enable: use monitor or not.
+        ///
+        public func usingMonitor(_ enable:Bool = true){
+            self.socket.usingMonitor(enable)
         }
     }
 }
@@ -47,31 +68,6 @@ extension MQTT{
         var maxPacketSize: Int?
         var retainAvailable: Bool = true
         var maxTopicAlias: UInt16 = 65535
-    }
-}
-extension MQTT.Client{
-    
-    /// Enabling the retry mechanism
-    ///
-    /// - Parameters:
-    ///    - policy: Retry policcy
-    ///    - limits: max retry times
-    ///    - filter: filter retry when some code and reason
-    ///
-    public func usingRetrier(
-        _ policy:Retrier.Policy = .exponential(),
-        limits:UInt = 10,
-        filter:Retrier.Filter? = nil)
-    {
-        self.socket.retrier = Retrier(policy, limits: limits, filter: filter)
-    }
-    /// Enabling the network mornitor mechanism
-    ///
-    /// - Parameters:
-    ///    - enable: use monitor or not.
-    ///
-    public func usingMonitor(_ enable:Bool = true){
-        self.socket.usingMonitor(enable)
     }
 }
 extension MQTT.Client{

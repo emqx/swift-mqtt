@@ -4,7 +4,7 @@ import Network
 
 
 let mqtt = {
-    let m = MQTT.ClientV5("swift-mqtt", endpoint: .quic(host: "docs.lerjin.com"))
+    let m = MQTT.ClientV5("swift-mqtt", endpoint: .tls(host: "127.0.0.1"))
     m.config.username = "jagat-mqtt-pwd-im"
     m.config.password = "jagat-mqtt-pwd-im"
     m.usingMonitor()

@@ -34,7 +34,7 @@ extension Properties{
     public func publish()->Property.Publish{ .init(self) }
     
     func write(to byteBuffer: inout DataBuffer) throws {
-        Serializer.writeVariableLengthInteger(self.packetSize, to: &byteBuffer)
+        Serializer.writeVarint(self.packetSize, to: &byteBuffer)
 
         for property in self {
             try property.write(to: &byteBuffer)
@@ -45,7 +45,7 @@ extension Properties{
         guard byteBuffer.readableBytes > 0 else {
             return .init()
         }
-        let packetSize = try Serializer.readVariableLengthInteger(from: &byteBuffer)
+        let packetSize = try Serializer.readVarint(from: &byteBuffer)
         guard var propertyBuffer = byteBuffer.readBuffer(length: packetSize) else { throw MQTTError.badResponse }
         while propertyBuffer.readableBytes > 0 {
             let property = try Property.read(from: &propertyBuffer)
@@ -156,7 +156,7 @@ extension Property {
         case byte(UInt8)
         case twoByteInteger(UInt16)
         case fourByteInteger(UInt32)
-        case variableLengthInteger(Int)
+        case varint(Int)
         case string(String)
         case stringPair(String, String)
         case binaryData(Data)
@@ -169,8 +169,8 @@ extension Property {
                 return 2
             case .fourByteInteger:
                 return 4
-            case .variableLengthInteger(let value):
-                return Serializer.variableLengthIntegerPacketSize(value)
+            case .varint(let value):
+                return Serializer.varintPacketSize(value)
             case .string(let string):
                 return 2 + string.utf8.count
             case .stringPair(let string1, let string2):
@@ -188,8 +188,8 @@ extension Property {
                 byteBuffer.writeInteger(value)
             case .fourByteInteger(let value):
                 byteBuffer.writeInteger(value)
-            case .variableLengthInteger(let value):
-                Serializer.writeVariableLengthInteger(value, to: &byteBuffer)
+            case .varint(let value):
+                Serializer.writeVarint(value, to: &byteBuffer)
             case .string(let string):
                 try Serializer.writeString(string, to: &byteBuffer)
             case .stringPair(let string1, let string2):
@@ -210,7 +210,7 @@ extension Property {
         case .contentType(let value): return .string(value)
         case .responseTopic(let value): return .string(value)
         case .correlationData(let value): return .binaryData(value)
-        case .subscriptionIdentifier(let value): return .variableLengthInteger(value)
+        case .subscriptionIdentifier(let value): return .varint(value)
         case .sessionExpiryInterval(let value): return .fourByteInteger(value)
         case .assignedClientIdentifier(let value): return .string(value)
         case .serverKeepAlive(let value): return .twoByteInteger(value)
@@ -291,7 +291,7 @@ extension Property {
             let data = try Serializer.readData(from: &byteBuffer)
             return .correlationData(data)
         case .subscriptionIdentifier:
-            let value = try Serializer.readVariableLengthInteger(from: &byteBuffer)
+            let value = try Serializer.readVarint(from: &byteBuffer)
             return .subscriptionIdentifier(value)
         case .sessionExpiryInterval:
             guard let value: UInt32 = byteBuffer.readInteger() else { throw MQTTError.badResponse }

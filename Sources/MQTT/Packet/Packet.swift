@@ -53,7 +53,7 @@ extension Packet {
     /// write fixed header for packet
     func writeFixedHeader(packetType: PacketType, flags: UInt8 = 0, size: Int, to byteBuffer: inout DataBuffer) {
         byteBuffer.writeInteger(packetType.rawValue | flags)
-        Serializer.writeVariableLengthInteger(size, to: &byteBuffer)
+        Serializer.writeVarint(size, to: &byteBuffer)
     }
 }
 
@@ -147,7 +147,7 @@ struct ConnectPacket: Packet {
         // properties
         if version == .v5_0 {
             let propertiesPacketSize = self.properties.packetSize
-            size += Serializer.variableLengthIntegerPacketSize(propertiesPacketSize) + propertiesPacketSize
+            size += Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
         }
         // payload
         // client identifier
@@ -157,7 +157,7 @@ struct ConnectPacket: Packet {
             // properties
             if version == .v5_0 {
                 let propertiesPacketSize = will.properties.packetSize
-                size += Serializer.variableLengthIntegerPacketSize(propertiesPacketSize) + propertiesPacketSize
+                size += Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
             }
             // will topic
             size += will.topic.utf8.count + 2
@@ -254,7 +254,7 @@ struct PublishPacket: Packet {
         // properties
         if version == .v5_0 {
             let propertiesPacketSize = self.message.properties.packetSize
-            size += Serializer.variableLengthIntegerPacketSize(propertiesPacketSize) + propertiesPacketSize
+            size += Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
         }
         // payload
         size += self.message.payload.count
@@ -314,7 +314,7 @@ struct SubscribePacket: Packet {
         // properties
         if version == .v5_0 {
             let propertiesPacketSize = self.properties?.packetSize ?? 0
-            size += Serializer.variableLengthIntegerPacketSize(propertiesPacketSize) + propertiesPacketSize
+            size += Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
         }
         // payload
         return self.subscriptions.reduce(size) {
@@ -357,7 +357,7 @@ struct UnsubscribePacket: Packet {
         // properties
         if version == .v5_0 {
             let propertiesPacketSize = self.properties?.packetSize ?? 0
-            size += Serializer.variableLengthIntegerPacketSize(propertiesPacketSize) + propertiesPacketSize
+            size += Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
         }
         // payload
         return self.subscriptions.reduce(size) {
@@ -421,7 +421,7 @@ struct PubackPacket: Packet {
            self.reason != .success || self.properties.count > 0
         {
             let propertiesPacketSize = self.properties.packetSize
-            return 3 + Serializer.variableLengthIntegerPacketSize(propertiesPacketSize) + propertiesPacketSize
+            return 3 + Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
         }
         return 2
     }
@@ -469,7 +469,7 @@ struct SubackPacket: Packet {
     func packetSize(version: MQTT.Version) -> Int {
         if version == .v5_0 {
             let propertiesPacketSize = self.properties.packetSize
-            return 2 + Serializer.variableLengthIntegerPacketSize(propertiesPacketSize) + propertiesPacketSize
+            return 2 + Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
         }
         return 2
     }
@@ -545,7 +545,7 @@ struct DisconnectPacket: Packet {
     func packetSize(version: MQTT.Version) -> Int {
         if version == .v5_0, self.reason != .success || self.properties.count > 0{
             let propertiesPacketSize = self.properties.packetSize
-            return 1 + Serializer.variableLengthIntegerPacketSize(propertiesPacketSize) + propertiesPacketSize
+            return 1 + Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
         }
         return 0
     }
@@ -609,12 +609,12 @@ struct AuthPacket: Packet {
             return 0
         }
         let propertiesPacketSize = self.properties.packetSize
-        return 1 + Serializer.variableLengthIntegerPacketSize(propertiesPacketSize) + propertiesPacketSize
+        return 1 + Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
     }
 }
 
 /// MQTT incoming packet parameters.
-struct IncomingPacket: Packet {
+struct IncomingPacket {
     var description: String { "Incoming Packet 0x\(String(format: "%x", self.type.rawValue))" }
     /// Type of incoming MQTT packet.
     let type: PacketType
@@ -623,7 +623,7 @@ struct IncomingPacket: Packet {
     /// Remaining serialized data in the MQTT packet.
     let remainingData: DataBuffer
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
-        writeFixedHeader(packetType: self.type, flags: self.flags, size: self.remainingData.readableBytes, to: &byteBuffer)
+//        writeFixedHeader(packetType: self.type, flags: self.flags, size: self.remainingData.readableBytes, to: &byteBuffer)
         var buffer = self.remainingData
         byteBuffer.writeBuffer(&buffer)
     }
@@ -639,7 +639,7 @@ struct IncomingPacket: Packet {
         guard let type = PacketType(rawValue: byte) ?? PacketType(rawValue: byte & 0xF0) else {
             throw MQTTError.unrecognisedPacketType
         }
-        let length = try Serializer.readVariableLengthInteger(from: &byteBuffer)
+        let length = try Serializer.readVarint(from: &byteBuffer)
         guard let buffer = byteBuffer.readBuffer(length: length) else { throw InternalError.incompletePacket }
         return IncomingPacket(type: type, flags: byte & 0xF, remainingData: buffer)
     }

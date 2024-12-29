@@ -46,7 +46,7 @@ class Reader:@unchecked Sendable{
             if byte & 0x80 != 0{
                 let result = self.multiply.multipliedReportingOverflow(by: 0x80)
                 if result.overflow {
-                    self.delegate?.reader(self, didReceive: DecodeError.variableLengthOverflow)
+                    self.delegate?.reader(self, didReceive: DecodeError.varintOverflow)
                     return
                 }
                 self.multiply = result.partialValue
@@ -128,7 +128,7 @@ class Reader:@unchecked Sendable{
 
 extension NWConnection{
     var isudp:Bool{
-        if let opt = parameters.defaultProtocolStack.transportProtocol,opt is NWProtocolUDP{
+        if let opt = parameters.defaultProtocolStack.transportProtocol,opt is NWProtocolUDP.Options{
             return true
         }
         return false

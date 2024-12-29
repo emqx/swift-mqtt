@@ -34,8 +34,6 @@ public enum MQTTError:Sendable,Equatable, Swift.Error {
     case unexpectedMessage
     /// Decode of MQTT message failed
     case decodeError
-    /// Upgrade to websocker failed
-    case websocketUpgradeFailed
     /// client timed out while waiting for response from server
     case timeout
     /// Internal error, used to get the client to retry sending
@@ -70,7 +68,7 @@ public enum PacketError:Sendable,Equatable,Swift.Error {
 
 public enum DecodeError:Sendable,Equatable,Swift.Error{
     /// Read variable length overflow
-    case variableLengthOverflow
+    case varintOverflow
     /// some network error
     case networkError(_ error:NWError)
     /// got unexpected data length when read

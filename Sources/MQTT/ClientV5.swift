@@ -20,35 +20,28 @@ extension MQTT{
         /// - Parameters:
         ///   - clientID: Client Identifier
         ///   - endpoint:The network endpoint
-        ///   - params: The connection parameters `default` is `.tls`
         public init(_ clientId: String, endpoint:Endpoint) {
             self.client = Client(clientId, endpoint: endpoint)
             self.client.config.version = .v5_0
         }
-    }
-}
-extension MQTT.ClientV5{
-    /// Enabling the retry mechanism
-    ///
-    /// - Parameters:
-    ///    - policy: Retry policcy
-    ///    - limits: max retry times
-    ///    - filter: filter retry when some code and reason
-    ///
-    public func usingRetrier(
-        _ policy:Retrier.Policy = .exponential(),
-        limits:UInt = 10,
-        filter:Retrier.Filter? = nil)
-    {
-        self.client.usingRetrier(policy,limits: limits,filter: filter)
-    }
-    /// Enabling the network mornitor mechanism
-    ///
-    /// - Parameters:
-    ///    - enable: use monitor or not.
-    ///
-    public func usingMonitor(_ enable:Bool = true){
-        self.client.usingMonitor(enable)
+        /// Enabling the retry mechanism
+        ///
+        /// - Parameters:
+        ///    - policy: Retry policcy
+        ///    - limits: max retry times
+        ///    - filter: filter retry when some code and reason
+        ///
+        public func usingRetrier(_ policy:Retrier.Policy = .exponential(),limits:UInt = 10,filter:Retrier.Filter? = nil){
+            self.client.usingRetrier(policy,limits: limits,filter: filter)
+        }
+        /// Enabling the network mornitor mechanism
+        ///
+        /// - Parameters:
+        ///    - enable: use monitor or not.
+        ///
+        public func usingMonitor(_ enable:Bool = true){
+            self.client.usingMonitor(enable)
+        }
     }
 }
 extension MQTT.ClientV5{
