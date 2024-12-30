@@ -109,8 +109,6 @@ extension MQTT{
     }
     ///  close reason
     public enum CloseReason:Sendable,Equatable,CustomStringConvertible{
-        /// recv server disconnect packet or send disconnect packet
-        case disconnect(ReasonCode,Properties)
         /// normal cllose default state
         case normalClose
         /// close when ping timeout
@@ -123,6 +121,8 @@ extension MQTT{
         case connectFail(ConnectRetrunCode)
         /// close when network error.
         case networkError(NWError)
+        /// recv server disconnect packet or send disconnect packet
+        case disconnect(ReasonCode,Properties)
         public var description: String{
             switch self{
             case .disconnect(let code,_):   return "close packet code:\(code)"

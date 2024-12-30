@@ -14,9 +14,11 @@ final class Socket:@unchecked Sendable{
     internal var retrier:MQTT.Retrier?
     internal var statusChanged:(((new:MQTT.Status,old:MQTT.Status))->Void)?
     internal var onMessage:((MQTT.Message)->Void)?
+    internal var nw:NWConnection?
+    internal let endpoint:MQTT.Endpoint
+    internal let config:MQTT.Config
+
     private let lock = Lock()
-    private var nw:NWConnection?
-    private let endpoint:MQTT.Endpoint
     private var pinging:MQTT.Pinging?
     private var monitor:MQTT.Monitor?
     private var activeTasks:[UInt16:MQTT.Task] = [:] // active workflow tasks
@@ -26,7 +28,6 @@ final class Socket:@unchecked Sendable{
     private var reader:Reader?
     private var retrying:Bool = false
     private var openTask:Promise<Packet>?
-    private let config:MQTT.Config
     private var version:MQTT.Version { config.version }
     
     private var packet:ConnectPacket?
@@ -154,6 +155,11 @@ final class Socket:@unchecked Sendable{
         guard let packet else{
             return
         }
+        if #available(iOS 15.0, *) {
+            if let meta = self.nw?.metadata(definition: NWProtocolQUIC.definition) as? NWProtocolQUIC.Metadata{
+                meta.keepAlive = .seconds(5)
+            }
+        }
         self.sendPacket(packet).then { packet in
             self.openTask?.done(packet)
             self.openTask = nil
@@ -229,18 +235,20 @@ final class Socket:@unchecked Sendable{
         }
     }
     private func resume(){
-        let params = endpoint.params()
+        let params = endpoint.params(config: config)
         let conn = NWConnection(to: params.0, using: params.1)
         conn.stateUpdateHandler = self.handle(state:)
         conn.start(queue: queue)
         self.nw = conn
-        self.reader = Reader(self, conn: conn, version: version)
+        self.reader = Reader(self)
     }
 }
 extension Socket{
     func resetPing(){
-        self.pinging = MQTT.Pinging(self, timeout: config.pingTimeout, interval: TimeInterval(config.keepAlive))
-        self.pinging?.resume()
+        if self.config.pingEnabled{
+            self.pinging = MQTT.Pinging(self, timeout: config.pingTimeout, interval: TimeInterval(config.keepAlive))
+            self.pinging?.resume()
+        }
     }
     func usingMonitor(_ enable:Bool){
         guard enable else{
@@ -337,7 +345,7 @@ extension Socket{
         return promise
     }
 }
-extension Socket:ReaderDelegate{
+extension Socket{
     /// Respond to PUBREL message by sending PUBCOMP. Do this separate from `ackPublish` as the broker might send
     /// multiple PUBREL messages, if the client is slow to respond
     private func ackPubrel(_ packet: PubackPacket){

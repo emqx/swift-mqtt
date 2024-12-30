@@ -11,48 +11,21 @@ import CocoaMQTT
 import Foundation
 
 let client = MQTTClient()
-//let mqtt = {
-//    let m = CocoaMQTT5(clientID: "swift-mqtt", host: "broker.beta.jagat.io", port: 1883)
-//    m.connectProperties = MqttConnectProperties()
-//    m.connectProperties?.topicAliasMaximum = 0
-//    m.username = "jagat-mqtt-pwd-im"
-//    m.password = "jagat-mqtt-pwd-im"
-//    m.cleanSession = true
-//    m.logLevel = .debug
-//    m.delegate = client
-//    return m
-//}()
 
 let mqtt = {
-    var options = TLS.Options()
-    if let file = Bundle.main.path(forResource: "client", ofType: "p12"){
-        do {
-            options.credential = try .create(from: file, passwd: "123456")
-        } catch  {
-            print(error)
-        }
-    }
-    options.verify = .trustAll
-    options.serverName = "docs"
-    options.minVersion = .v1_3
-    options.maxVersion = .v1_3
-    options.quicOptions = .init()
-    options.quicOptions?.isDatagram = true
-    let m = MQTT.ClientV5("swift-mqtt", endpoint: .quic(host: "docs.lerjin.com",options: options))
-    m.config.username = "jagat-mqtt-pwd-im"
-    m.config.password = "jagat-mqtt-pwd-im"
+
+    let quic = MQTT.Endpoint.quic(host: "172.16.2.7",tls: .trustAll())
+    let tls = MQTT.Endpoint.tls(host: "172.16.253.2",tls: .trustAll())
+    let m = MQTT.ClientV5("swift-mqtt", endpoint: quic)
+    m.config.keepAlive = 60
+    m.config.username = "test"
+    m.config.password = "test"
     m.usingMonitor()
     m.usingRetrier()
     MQTT.Logger.level = .debug
     return m
 }()
 
-//let mqtt = {
-//    let params = NWParameters.tls
-//    let endpoint = NWEndpoint.hostPort(host: "broker.beta.jagat.io", port: 1883)
-//    let m = MQTTNIO.MQTTClient(host: "broker.beta.jagat.io", port: 1883, identifier: "swift-mqtt", eventLoopGroupProvider: .createNew, logger: .init(label: "MQTT"),configuration: .init(version: .v5_0,userName: "jagat-mqtt-pwd-im",password: "jagat-mqtt-pwd-im"))
-//    return m
-//}()
 extension MQTTNIO.MQTTClient{
     func open(){
         _ = self.connect(cleanSession: true,will: nil)
