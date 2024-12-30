@@ -19,17 +19,11 @@ extension MQTT{
         private let port:UInt16
         private let opt:NWProtocolOptions
         private var tls:TLS.Options?
-        public static func ws(host:String,port:UInt16 = 8083,opt:NWProtocolTCP.Options = .init())->Endpoint{
-            return .init(type: .ws,host: host, port: port,opt: opt,tls: nil)
-        }
         public static func tcp(host:String,port:UInt16 = 1883,opt:NWProtocolTCP.Options = .init())->Endpoint{
             return .init(type: .tcp,host: host, port: port,opt: opt,tls: nil)
         }
         public static func tls(host:String,port:UInt16 = 8883,opt:NWProtocolTCP.Options = .init(),tls:TLS.Options? = nil)->Endpoint{
             return .init(type: .tls,host: host, port: port,opt: opt,tls: tls)
-        }
-        public static func wss(host:String,port:UInt16 = 8084,opt:NWProtocolTCP.Options = .init(),tls:TLS.Options? = nil)->Endpoint{
-            return .init(type: .wss,host: host, port: port,opt: opt,tls: tls)
         }
         @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
         public static func quic(host:String,port:UInt16 = 14567,opt:NWProtocolQUIC.Options = .mqtt,tls:TLS.Options? = nil)->Endpoint{
@@ -63,7 +57,6 @@ extension MQTT{
                 let params = NWParameters(tls: tlsOptions, tcp: tcp)
                 return (endpoint,params)
             case .wss:
-                fatalError("No implement now")
                 let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
                 let tcp = opt as! NWProtocolTCP.Options
                 let tlsOptions = NWProtocolTLS.Options()
@@ -74,7 +67,6 @@ extension MQTT{
                 params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
                 return (endpoint,params)
             case .ws:
-                fatalError("No implement now")
                 let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
                 let tcp = opt as! NWProtocolTCP.Options
                 let params = NWParameters(tls: nil, tcp: tcp)
@@ -158,7 +150,7 @@ public enum TLS{
         /// Build trust all certs options conveniently
         /// - Important: This setting is not secure and is usually only used as a test during the development phase
         public class func trustAll()->Options{
-            var opt = Options()
+            let opt = Options()
             opt.verify = .trustAll
             return opt
         }

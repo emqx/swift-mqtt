@@ -155,11 +155,6 @@ final class Socket:@unchecked Sendable{
         guard let packet else{
             return
         }
-        if #available(iOS 15.0, *) {
-            if let meta = self.nw?.metadata(definition: NWProtocolQUIC.definition) as? NWProtocolQUIC.Metadata{
-                meta.keepAlive = .seconds(5)
-            }
-        }
         self.sendPacket(packet).then { packet in
             self.openTask?.done(packet)
             self.openTask = nil
