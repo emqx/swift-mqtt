@@ -11,7 +11,7 @@ import Promise
 ///
 /// Global MQTT namespace
 ///
-public enum MQTT{ }
+public enum MQTT:Sendable{ }
 
 
 extension MQTT{

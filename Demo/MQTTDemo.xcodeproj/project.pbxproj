@@ -7,9 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		33F337882D0FF284006B97F0 /* MQTTNIO in Frameworks */ = {isa = PBXBuildFile; productRef = 33F337872D0FF284006B97F0 /* MQTTNIO */; };
 		33F3378B2D0FF4DF006B97F0 /* MQTT in Frameworks */ = {isa = PBXBuildFile; productRef = 33F3378A2D0FF4DF006B97F0 /* MQTT */; };
-		33F3378D2D0FF4EC006B97F0 /* CocoaMQTT in Frameworks */ = {isa = PBXBuildFile; productRef = 33F3378C2D0FF4EC006B97F0 /* CocoaMQTT */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,8 +70,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				33F3378B2D0FF4DF006B97F0 /* MQTT in Frameworks */,
-				33F3378D2D0FF4EC006B97F0 /* CocoaMQTT in Frameworks */,
-				33F337882D0FF284006B97F0 /* MQTTNIO in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -142,9 +138,7 @@
 			);
 			name = MQTTDemo;
 			packageProductDependencies = (
-				33F337872D0FF284006B97F0 /* MQTTNIO */,
 				33F3378A2D0FF4DF006B97F0 /* MQTT */,
-				33F3378C2D0FF4EC006B97F0 /* CocoaMQTT */,
 			);
 			productName = MQTTDemo;
 			productReference = 33CC16A82D0994760063F140 /* MQTTDemo.app */;
@@ -230,8 +224,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				33CC16E42D0994EE0063F140 /* XCLocalSwiftPackageReference "../../swift-mqtt" */,
-				33F337862D0FF211006B97F0 /* XCRemoteSwiftPackageReference "mqtt-nio" */,
-				33F337892D0FF2FA006B97F0 /* XCRemoteSwiftPackageReference "CocoaMQTT" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 33CC16A92D0994760063F140 /* Products */;
@@ -606,40 +598,11 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		33F337862D0FF211006B97F0 /* XCRemoteSwiftPackageReference "mqtt-nio" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/swift-server-community/mqtt-nio.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.11.0;
-			};
-		};
-		33F337892D0FF2FA006B97F0 /* XCRemoteSwiftPackageReference "CocoaMQTT" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/emqx/CocoaMQTT";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.1.8;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
-		33F337872D0FF284006B97F0 /* MQTTNIO */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 33F337862D0FF211006B97F0 /* XCRemoteSwiftPackageReference "mqtt-nio" */;
-			productName = MQTTNIO;
-		};
 		33F3378A2D0FF4DF006B97F0 /* MQTT */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 33CC16E42D0994EE0063F140 /* XCLocalSwiftPackageReference "../../swift-mqtt" */;
 			productName = MQTT;
-		};
-		33F3378C2D0FF4EC006B97F0 /* CocoaMQTT */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 33F337892D0FF2FA006B97F0 /* XCRemoteSwiftPackageReference "CocoaMQTT" */;
-			productName = CocoaMQTT;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

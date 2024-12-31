@@ -177,7 +177,7 @@ extension MQTT{
         ///    - port: The server listen port
         ///    - opt: The quic protocol options
         ///    - tls: The tls handshake options
-        /// - Important: The property `opt.idleTimout` will overwirte by `config.keepAlive`. So it's no effect!
+        /// - Important: The property `opt.idleTimout` wil bel overwrited by `config.keepAlive` when `config.pingEnable` is true.
         ///
         @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
         public static func quic(host:String,port:UInt16 = 14567,opt:NWProtocolQUIC.Options = .mqtt,tls:TLSOptions? = nil)->Endpoint{
@@ -189,7 +189,9 @@ extension MQTT{
                 if #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) {
                     let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
                     let quic = opt as! NWProtocolQUIC.Options
-                    quic.idleTimeout = Int(config.keepAlive) * 1500 // 1.5x keepAlive time
+                    if config.pingEnabled{
+                        quic.idleTimeout = Int(config.keepAlive) * 1500 // 1.5x keepAlive time
+                    }
                     tls?.update_sec_options(quic.securityProtocolOptions)
                     let params = NWParameters(quic: quic)
                     return (endpoint,params)

@@ -9,12 +9,12 @@ import Network
 import Foundation
 
 extension MQTT{
-    public final class Retrier{
+    public final class Retrier:@unchecked Sendable{
         /// Retry filter
         /// Tell me true if the reason need retry
         public typealias Filter = @Sendable (MQTT.CloseReason)->Bool
         /// Retry backoff policy
-        public enum Policy{
+        public enum Policy:Sendable{
             /// The retry time grows linearly
             case linear(scale:Double = 1)
             /// The retry time does not grow. Use equal time interval
@@ -99,7 +99,7 @@ extension MQTT{
     }
 
     /// Implementation of ping pong mechanism
-    public final class Pinging{
+    public final class Pinging:@unchecked Sendable{
         /// current pinging timeout tolerance
         public let timeout:TimeInterval
         /// current pinging time interval
