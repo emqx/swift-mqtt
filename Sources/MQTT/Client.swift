@@ -12,20 +12,35 @@ import Network
 import Promise
 
 public protocol MQTTDelegate:AnyObject{
-    func mqtt(_ mqtt: MQTT, didUpdate status:MQTT.Status,prev:MQTT.Status)
-    func mqtt(_ mqtt: MQTT, didReceive error:MQTT.Message)
-    func mqtt(_ mqtt: MQTT, didReceive error:Error)
+    func mqtt(_ mqtt: MQTT.Client, didUpdate status:MQTT.Status,prev:MQTT.Status)
+    func mqtt(_ mqtt: MQTT.Client, didReceive error:MQTT.Message)
+    func mqtt(_ mqtt: MQTT.Client, didReceive error:Error)
 
 }
 extension MQTT{
     public final class Client: @unchecked Sendable{
-        private let socket:Socket
+        let socket:Socket
         private var inflight: Inflight = .init()
         private var connParams = ConnectParams()
-        
         public let config:Config
         public var status:Status { self.socket.status }
         public var isOpened:Bool { self.socket.status == .opened }
+        public weak var delegate:MQTTDelegate?{
+            didSet{
+                guard let delegate else {
+                    return
+                }
+                self.socket.onMessage = {msg in
+                    delegate.mqtt(self, didReceive: msg)
+                }
+                self.socket.onError = {err in
+                    delegate.mqtt(self, didReceive: err)
+                }
+                self.socket.onStatus = { new,old in
+                    delegate.mqtt(self, didUpdate: new, prev: old)
+                }
+            }
+        }
         @Atomic
         private var packetId: UInt16 = 0
         /// Initial v3 client object
@@ -479,128 +494,5 @@ extension MQTT.Client {
         }
     }
 }
-
-//extension MQTT: ReaderDelegate{
-//    func readCompleted(_ reader: Reader) {
-//
-//    }
-//    func reader(_ reader: Reader, didReceive error: any Error) {
-//        Logger.debug("RECV: \(error)")
-//    }
-//    func reader(_ reader: Reader, didReceive packet: any Packet) {
-//        Logger.debug("RECV: \(packet)")
-//        switch packet.type{
-//        case .DISCONNECT:
-//            self.tryClose(code: (packet as! MQTTDisconnectPacket).reason , reason: .server)
-//        case .AUTH:
-//            if let task = self.authTask{
-//                task.done(with: packet)
-//                self.authTask = nil
-//            }else if let task = self.connTask{
-//                task.done(with: packet)
-//                self.connTask = nil
-//            }
-//        case .CONNACK:
-//            if let task = self.connTask{
-//                task.done(with: packet)
-//                self.connTask = nil
-//            }
-//        case .PINGREQ:
-//            self.pinging?.onPong()
-//        default:
-//            guard let task = self.allTasks[packet.packetId] else{
-//                return
-//            }
-//            task.done(with: packet)
-//            self.allTasks.removeValue(forKey: packet.packetId)
-//        }
-//        switch packet{
-//        case let disconn as MQTTDisconnectPacket:
-//            self.tryClose(code: disconn.reason , reason: .server)
-//        case let authack as MQTTAuthPacket:
-//            if let task = self.authTask{
-//                task.done(with: authack)
-//                self.authTask = nil
-//            }else if let task = self.connTask{
-//                task.done(with: authack)
-//                self.connTask = nil
-//            }
-//        case let connack as MQTTConnAckPacket:
-//            if let task = self.connTask{
-//                task.done(with: connack)
-//                self.connTask = nil
-//            }
-//            if connack.returnCode == 0 {
-//                if cleanSession {
-////                    deliver.cleanAll()
-//                } else {
-//                    if let storage = Storage(by: identifier) {
-////                        deliver.recoverSessionBy(storage)
-//                    } else {
-//                        Logger.warning("Localstorage initial failed for key: \(identifier)")
-//                    }
-//                }
-//                self.status = .opened
-//            } else {
-//                self.close()
-//            }
-//        case let pong as MQTTPingrespPacket:
-//            if let task = self.pingTask{
-//                task.done(with: pong)
-//                self.pingTask = nil
-//            }
-//        case let ack as MQTTPubAckPacket:
-//            guard var task = self.pubTasks[ack.packetId] else{
-//                return
-//            }
-//            switch task.packet{
-//            case let taskpub as MQTTPublishPacket:
-//                switch taskpub.publish.qos{
-//                case .atMostOnce:
-//                    task.promise.done(MQTTError.unexpectedMessage)
-//                    self.pubTasks[ack.packetId] = nil
-//                    self.inflight.remove(id: ack.packetId)
-//                case .atLeastOnce:
-//                    if ack.type == .PUBACK {// success
-//                        task.promise.done(.init(reason: ack.reason,properties: ack.properties))
-//                    }else{
-//                        task.promise.done(MQTTError.unexpectedMessage)
-//                    }
-//                    self.pubTasks[ack.packetId] = nil
-//                    self.inflight.remove(id: ack.packetId)
-//                case .exactlyOnce:
-//                    guard ack.type == .PUBREC else {
-//                        task.promise.done(MQTTError.unexpectedMessage)
-//                        self.pubTasks[ack.packetId] = nil
-//                        self.inflight.remove(id: ack.packetId)
-//                        return
-//                    }
-//                    task.packet = ack
-//                    self.send(MQTTPubAckPacket(type: .PUBREL, packetId: packet.packetId))
-//                }
-//            case let taskack as MQTTPubAckPacket:
-//                if taskack.type == .PUBREC,ack.type == .PUBCOMP{ // success
-//                    task.promise.done(.init(reason: ack.reason,properties: ack.properties))
-//                }else{
-//                    task.promise.done(MQTTError.unexpectedMessage)
-//                }
-//                self.pubTasks[ack.packetId] = nil
-//                self.inflight.remove(id: ack.packetId)
-//
-//            default:
-//                //never
-//                break
-//            }
-//        case let suback as MQTTSubAckPacket:
-//            if let promise = self.subTasks[packet.packetId] {
-//
-//                promise.done(suback)
-//                self.subTasks[packet.packetId] = nil
-//            }
-//        default:
-//            break
-//        }
-//    }
-//}
 
 

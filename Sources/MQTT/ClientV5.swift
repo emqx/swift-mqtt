@@ -9,12 +9,34 @@ import Promise
 import Network
 import Foundation
 
+public protocol MQTT5Delegate:AnyObject{
+    func mqtt(_ mqtt: MQTT.ClientV5, didUpdate status:MQTT.Status,prev:MQTT.Status)
+    func mqtt(_ mqtt: MQTT.ClientV5, didReceive error:MQTT.Message)
+    func mqtt(_ mqtt: MQTT.ClientV5, didReceive error:Error)
+}
+
 extension MQTT{
     public final class ClientV5 : @unchecked Sendable{
         private let client:Client
         public var config:Config { self.client.config }
         public var status:Status { self.client.status }
         public var isOpened:Bool { self.client.status == .opened }
+        public weak var delegate:MQTT5Delegate?{
+            didSet{
+                guard let delegate else {
+                    return
+                }
+                self.client.socket.onMessage = {msg in
+                    delegate.mqtt(self, didReceive: msg)
+                }
+                self.client.socket.onError = {err in
+                    delegate.mqtt(self, didReceive: err)
+                }
+                self.client.socket.onStatus = { new,old in
+                    delegate.mqtt(self, didUpdate: new, prev: old)
+                }
+            }
+        }
         /// Initial v5 client object
         ///
         /// - Parameters:

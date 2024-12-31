@@ -12,7 +12,8 @@ import Promise
 final class Socket:@unchecked Sendable{
     internal let queue:DispatchQueue
     internal var retrier:MQTT.Retrier?
-    internal var statusChanged:(((new:MQTT.Status,old:MQTT.Status))->Void)?
+    internal var onError:((Error)->Void)?
+    internal var onStatus:((MQTT.Status,MQTT.Status)->Void)?
     internal var onMessage:((MQTT.Message)->Void)?
     internal var nw:NWConnection?
     internal let endpoint:MQTT.Endpoint
@@ -76,7 +77,7 @@ final class Socket:@unchecked Sendable{
                 case .closing:
                     self.pinging?.suspend()
                 }
-                self.statusChanged?((new:status,old:oldValue))
+                self.onStatus?(status,oldValue)
             }
         }
     }
@@ -123,6 +124,7 @@ final class Socket:@unchecked Sendable{
         case .failed(let error):
             // The connection has failed for some reason.
             self.tryClose(reason: .networkError(error))
+            self.onError?(error)
         case .ready:
             // Transitioning to ready means the connection was succeeded. Hooray!
             self.doReady()
@@ -144,6 +146,7 @@ final class Socket:@unchecked Sendable{
             // version of NIO this is an error, but we should aim to support this at some stage.
             MQTT.Logger.debug("connection wating error = \(error.debugDescription)")
             self.tryClose(reason: .networkError(error))
+            self.onError?(error)
         default:
             // This clause is here to help the compiler out: it's otherwise not able to
             // actually validate that the switch is exhaustive. Trust me, it is.
@@ -386,6 +389,7 @@ extension Socket{
     }
     func reader(_ reader: Reader, didReceive error: any Error) {
         MQTT.Logger.debug("RECV: \(error)")
+        self.onError?(error)
     }
     func reader(_ reader: Reader, didReceive packet: any Packet) {
         MQTT.Logger.debug("RECV: \(packet)")

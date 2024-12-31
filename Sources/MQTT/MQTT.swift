@@ -55,7 +55,7 @@ public enum MQTTQoS: UInt8, Sendable {
 }
 
 extension MQTT{
-    public enum Version{
+    public enum Version:Sendable{
         case v5_0
         case v3_1_1
         var string:String{
@@ -71,7 +71,7 @@ extension MQTT{
             }
         }
     }
-    public class Config{
+    public final class Config:@unchecked Sendable{
         /// protocol version init in client
         public internal(set) var version:MQTT.Version
         /// Version of MQTT server client is connecting to
@@ -130,4 +130,29 @@ extension MQTT{
             return self.promise
         }
     }
+}
+/// Array of inflight packets. Used to resend packets when reconnecting to server
+struct Inflight : Sendable{
+    @Atomic
+    private(set) var packets: [Packet] = []
+    /// add packet
+    func add(packet: Packet) {
+        self.$packets.write { pkgs in
+            pkgs.append(packet)
+        }
+    }
+    /// remove packert
+    func remove(id: UInt16) {
+        self.$packets.write { pkgs in
+            guard let first = pkgs.firstIndex(where: { $0.id == id }) else { return }
+            pkgs.remove(at: first)
+        }
+    }
+    /// remove all packets
+    func clear() {
+        self.$packets.write { pkgs in
+            pkgs = []
+        }
+    }
+
 }

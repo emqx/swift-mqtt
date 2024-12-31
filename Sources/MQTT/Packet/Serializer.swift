@@ -15,9 +15,9 @@ enum Serializer {
             let byte = UInt8(value & 0x7F)
             value >>= 7
             if value != 0 {
-                byteBuffer.writeInteger(byte | 0x80)
+                byteBuffer.writeByte(byte | 0x80)
             } else {
-                byteBuffer.writeInteger(byte)
+                byteBuffer.writeByte(byte)
             }
         } while value != 0
     }
@@ -79,7 +79,7 @@ enum Serializer {
         var value = 0
         var shift = 0
         repeat {
-            guard let byte: UInt8 = byteBuffer.readInteger() else { throw InternalError.incompletePacket }
+            guard let byte: UInt8 = byteBuffer.readByte() else { throw InternalError.incompletePacket }
             value += (Int(byte) & 0x7F) << shift
             if byte & 0x80 == 0 {
                 break

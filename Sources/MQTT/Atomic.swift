@@ -1,5 +1,5 @@
 //
-//  Inflight.swift
+//  Atomic.swift
 //  swift-mqtt
 //
 //  Created by supertext on 2024/12/23.
@@ -74,28 +74,4 @@ class Atomic<T> : @unchecked Sendable{
         get { around { self.value[keyPath: keyPath] } }
     }
 }
-/// Array of inflight packets. Used to resend packets when reconnecting to server
-struct Inflight : Sendable{
-    @Atomic
-    private(set) var packets: [Packet] = []
-    /// add packet
-    func add(packet: Packet) {
-        self.$packets.write { pkgs in
-            pkgs.append(packet)
-        }
-    }
-    /// remove packert
-    func remove(id: UInt16) {
-        self.$packets.write { pkgs in
-            guard let first = pkgs.firstIndex(where: { $0.id == id }) else { return }
-            pkgs.remove(at: first)
-        }
-    }
-    /// remove all packets
-    func clear() {
-        self.$packets.write { pkgs in
-            pkgs = []
-        }
-    }
 
-}

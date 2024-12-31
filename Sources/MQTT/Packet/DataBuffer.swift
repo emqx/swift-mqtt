@@ -16,20 +16,20 @@ struct DataBuffer:Sendable,Equatable{
     init(data: Data = Data()) {
         self.data = data
     }
-    /// buffer read and write
+    /// integer read and write
     @inlinable
-    mutating func writeBuffer(_ buffer: inout DataBuffer){
-        buffer.readIndex = buffer.data.count
-        self.data.append(buffer.data)
+    mutating func writeByte(_ byte:UInt8) {
+        self.data.append(byte)
     }
     @inlinable
-    mutating func readBuffer(length:Int)->DataBuffer?{
-        guard let data = self.readData(length: length) else{
+    mutating func readByte() -> UInt8? {
+        guard self.readableBytes >= 1 else {
             return nil
         }
-        return DataBuffer(data: data)
-    }
-    
+        let idx = readIndex
+        readIndex += 1
+        return self.data[idx]
+    }    
     /// data read and write
     @inlinable
     mutating func writeData(_ data: Data){
@@ -46,7 +46,19 @@ struct DataBuffer:Sendable,Equatable{
         readIndex += len
         return self.data.subdata(in: idx..<readIndex)
     }
-    
+    /// buffer read and write
+    @inlinable
+    mutating func writeBuffer(_ buffer: inout DataBuffer){
+        buffer.readIndex = buffer.data.count
+        self.data.append(buffer.data)
+    }
+    @inlinable
+    mutating func readBuffer(length:Int)->DataBuffer?{
+        guard let data = self.readData(length: length) else{
+            return nil
+        }
+        return DataBuffer(data: data)
+    }
     /// string read and write
     @inlinable
     mutating func writeString(_ string:String){
