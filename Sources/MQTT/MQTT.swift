@@ -122,7 +122,7 @@ extension MQTT{
         func start(_ timeout:UInt64? = nil) -> Promise<Packet>{
             if let timeout{
                 let item = DispatchWorkItem{
-                    self.promise.done(MQTTError.timeout)
+                    self.promise.done(MQError.timeout)
                 }
                 DispatchQueue.global().asyncAfter(deadline: .now()+TimeInterval(timeout), execute: item)
                 self.timeoutItem = item

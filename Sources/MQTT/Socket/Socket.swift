@@ -62,11 +62,11 @@ final class Socket:@unchecked Sendable{
                         case .networkError(let error):
                             task.done(error)
                         case .connectFail(let code):
-                            task.done(MQTTError.connectionError(code))
+                            task.done(MQError.connectionError(code))
                         case .disconnect(let code, _):
-                            task.done(MQTTError.reasonError(code))
+                            task.done(MQError.reasonError(code))
                         default:
-                            task.done(MQTTError.failedToConnect)
+                            task.done(MQError.failedToConnect)
                         }
                     }
                     self.openTask = nil
@@ -85,9 +85,9 @@ final class Socket:@unchecked Sendable{
         self.lock.lock(); defer { self.lock.unlock() }
         switch self.status{
         case .opened:
-            return .init(MQTTError.alreadyConnected)
+            return .init(MQError.alreadyConnected)
         case .opening:
-            return .init(MQTTError.alreadyConnecting)
+            return .init(MQError.alreadyConnecting)
         default:
             break
         }
@@ -279,7 +279,7 @@ extension Socket{
     @discardableResult
     func sendNoWait(_ packet: Packet,timeout:UInt64 = 5000)->Promise<Void> {
         guard self.status == .opened else{
-            return Promise<Void>(MQTTError.noConnection)
+            return Promise<Void>(MQError.noConnection)
         }
         do {
             MQTT.Logger.debug("SEND: \(packet)")
@@ -294,7 +294,7 @@ extension Socket{
     @discardableResult
     func sendPacket(_ packet: Packet,timeout:UInt64 = 5000)->Promise<Packet> {
         guard self.status == .opened || packet.type == .CONNECT else{
-            return Promise<Packet>(MQTTError.noConnection)
+            return Promise<Packet>(MQError.noConnection)
         }
         let task = MQTT.Task(packet)
         switch packet.type{
@@ -329,7 +329,7 @@ extension Socket{
     @discardableResult
     private func send(data:Data,timeout:UInt64)->Promise<Void>{
         guard let conn = self.nw else{
-            return .init(MQTTError.noConnection)
+            return .init(MQError.noConnection)
         }
         let promise = Promise<Void>()
         conn.send(content: data,contentContext: .default(timeout: timeout), completion: .contentProcessed({ error in
@@ -374,7 +374,7 @@ extension Socket{
                         // but there wo do noting because task will be replace by the same packetId
                         // so never happen here
                     }
-                    throw MQTTError.unexpectedMessage
+                    throw MQError.unexpectedMessage
                 }
                 .then{ msg in
                     self.onMessage?(msg)

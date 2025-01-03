@@ -115,7 +115,7 @@ extension MQTT{
         case pingTimeout
         /// auto close by network monitor when network unsatisfied
         case unsatisfied
-        /// decode or encode packet error
+//        /// decode or encode packet error
         case decodeError(DecodeError)
         /// connect fail with retrun code
         case connectFail(ConnectRetrunCode)

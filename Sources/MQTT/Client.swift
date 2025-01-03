@@ -237,15 +237,15 @@ extension MQTT.Client {
                 return Promise<ConnackPacket>(try self.processConnack(connack))
             case let auth as AuthPacket:
                 // auth messages require an auth workflow closure
-                guard let authflow else { throw MQTTError.authWorkflowRequired}
+                guard let authflow else { throw MQError.authflowRequired}
                 return self.processAuth(auth, authflow: authflow).then({ result in
                     if let packet = result as? ConnackPacket{
                         return packet
                     }
-                    throw MQTTError.unexpectedMessage
+                    throw MQError.unexpectedMessage
                 })
             default:
-                throw MQTTError.unexpectedMessage
+                throw MQError.unexpectedMessage
             }
         }
     }
@@ -283,12 +283,12 @@ extension MQTT.Client {
         case .v3_1_1:
             if connack.returnCode != 0 {
                 let returnCode = ConnectRetrunCode(rawValue: connack.returnCode) ?? .unrecognizedReturnValue
-                throw MQTTError.connectionError(returnCode)
+                throw MQError.connectionError(returnCode)
             }
         case .v5_0:
             if connack.returnCode > 0x7F {
                 let returnCode = ReasonCode(rawValue: connack.returnCode) ?? .unrecognisedReason
-                throw MQTTError.reasonError(returnCode)
+                throw MQError.reasonError(returnCode)
             }
         }
         for property in connack.properties {
@@ -321,19 +321,19 @@ extension MQTT.Client {
    
     func pubRel(packet: PubackPacket) -> Promise<AckV5?> {
         guard socket.status == .opened else {
-            return .init(MQTTError.noConnection)
+            return .init(MQError.noConnection)
         }
         self.inflight.add(packet: packet)
         return self.socket.sendPacket(packet).then{ message in
             guard message.type != .PUBREC else {
-                throw MQTTError.unexpectedMessage
+                throw MQError.unexpectedMessage
             }
             self.inflight.remove(id: packet.id)
             guard let pubcomp = message as? PubackPacket else{
-                throw MQTTError.unexpectedMessage
+                throw MQError.unexpectedMessage
             }
             if pubcomp.reason.rawValue > 0x7F {
-                throw MQTTError.reasonError(pubcomp.reason)
+                throw MQError.reasonError(pubcomp.reason)
             }
             return AckV5(reason: pubcomp.reason, properties: pubcomp.properties)
         }
@@ -342,7 +342,7 @@ extension MQTT.Client {
     /// - Parameters:
     ///     - packet: Publish packet
     func publish(packet: PublishPacket) -> Promise<AckV5?> {
-        guard socket.status == .opened else { return .init(MQTTError.noConnection) }
+        guard socket.status == .opened else { return .init(MQError.noConnection) }
         // check publish validity
         // check qos against server max qos
         guard self.connParams.maxQoS.rawValue >= packet.message.qos.rawValue else {
@@ -378,21 +378,21 @@ extension MQTT.Client {
                 self.inflight.remove(id: packet.id)
                 switch packet.message.qos {
                 case .atMostOnce:
-                    throw MQTTError.unexpectedMessage
+                    throw MQError.unexpectedMessage
                 case .atLeastOnce:
                     guard message.type == .PUBACK else {
-                        throw MQTTError.unexpectedMessage
+                        throw MQError.unexpectedMessage
                     }
                 case .exactlyOnce:
                     guard message.type == .PUBREC else {
-                        throw MQTTError.unexpectedMessage
+                        throw MQError.unexpectedMessage
                     }
                 }
                 guard let puback = message as? PubackPacket else{
-                    throw MQTTError.unexpectedMessage
+                    throw MQError.unexpectedMessage
                 }
                 if puback.reason.rawValue > 0x7F {
-                    throw MQTTError.reasonError(puback.reason)
+                    throw MQError.reasonError(puback.reason)
                 }
                 return puback
             }
@@ -403,10 +403,10 @@ extension MQTT.Client {
                 return .init(AckV5(reason: puback.reason, properties: puback.properties))
             }
             .catch { error in
-                if case MQTTError.serverDisconnection(let ack) = error, ack.reason == .malformedPacket{
+                if case MQError.serverDisconnection(let ack) = error, ack.reason == .malformedPacket{
                     self.inflight.remove(id: packet.id)
                 }
-                if case MQTTError.timeout = error{
+                if case MQError.timeout = error{
                     // how to resend here
                 }
                 throw error
@@ -423,7 +423,7 @@ extension MQTT.Client {
             if let suback = ack as? SubackPacket{
                 return suback
             }
-            throw MQTTError.unexpectedMessage
+            throw MQError.unexpectedMessage
         }
     }
     /// Subscribe to topic
@@ -437,7 +437,7 @@ extension MQTT.Client {
             if let suback = ack as? SubackPacket{
                 return suback
             }
-            throw MQTTError.unexpectedMessage
+            throw MQError.unexpectedMessage
         }
     }
     
@@ -446,12 +446,12 @@ extension MQTT.Client {
     }
     
     func reAuth(packet: AuthPacket) -> Promise<AuthPacket> {
-        guard socket.status == .opened else { return .init(MQTTError.noConnection) }
+        guard socket.status == .opened else { return .init(MQError.noConnection) }
         return self.socket.sendPacket(packet).then { ack in
             if let authack = ack as? AuthPacket{
                 return authack
             }
-            throw MQTTError.failedToConnect
+            throw MQError.failedToConnect
         }
     }
     
@@ -475,10 +475,10 @@ extension MQTT.Client {
                         case .success:
                             promise.done(auth)
                         default:
-                            promise.done(MQTTError.badResponse)
+                            promise.done(MQError.badResponse)
                         }
                     default:
-                        promise.done(MQTTError.unexpectedMessage)
+                        promise.done(MQError.unexpectedMessage)
                     }
                 }
         }

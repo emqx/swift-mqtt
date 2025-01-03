@@ -214,10 +214,10 @@ struct PublishPacket: Packet {
         var packetId: UInt16 = 0
         // read topic name
         let topicName = try Serializer.readString(from: &remainingData)
-        guard let qos = MQTTQoS(rawValue: (packet.flags & Flags.qosMask) >> Flags.qosShift) else { throw MQTTError.badResponse }
+        guard let qos = MQTTQoS(rawValue: (packet.flags & Flags.qosMask) >> Flags.qosShift) else { throw MQError.badResponse }
         // read packet id if QoS is not atMostOnce
         if qos != .atMostOnce {
-            guard let readPacketId: UInt16 = remainingData.readInteger() else { throw MQTTError.badResponse }
+            guard let readPacketId: UInt16 = remainingData.readInteger() else { throw MQError.badResponse }
             packetId = readPacketId
         }
         // read properties
@@ -398,7 +398,7 @@ struct PubackPacket: Packet {
 
     static func read(version: MQTT.Version, from packet: IncomingPacket) throws -> Self {
         var remainingData = packet.remainingData
-        guard let packetId: UInt16 = remainingData.readInteger() else { throw MQTTError.badResponse }
+        guard let packetId: UInt16 = remainingData.readInteger() else { throw MQError.badResponse }
         switch version {
         case .v3_1_1:
             return PubackPacket(id:packetId, type: packet.type)
@@ -409,7 +409,7 @@ struct PubackPacket: Packet {
             guard let reasonByte: UInt8 = remainingData.readInteger(),
                   let reason = ReasonCode(rawValue: reasonByte)
             else {
-                throw MQTTError.badResponse
+                throw MQError.badResponse
             }
             let properties = try Properties.read(from: &remainingData)
             return PubackPacket(id: packetId, type: packet.type, reason: reason, properties: properties)
@@ -447,7 +447,7 @@ struct SubackPacket: Packet {
 
     static func read(version: MQTT.Version, from packet: IncomingPacket) throws -> Self {
         var remainingData = packet.remainingData
-        guard let packetId: UInt16 = remainingData.readInteger() else { throw MQTTError.badResponse }
+        guard let packetId: UInt16 = remainingData.readInteger() else { throw MQError.badResponse }
         var properties: Properties
         if version == .v5_0 {
             properties = try Properties.read(from: &remainingData)
@@ -458,7 +458,7 @@ struct SubackPacket: Packet {
         if let reasonBytes = remainingData.readData() {
             reasons = try reasonBytes.map { byte -> ReasonCode in
                 guard let reason = ReasonCode(rawValue: byte) else {
-                    throw MQTTError.badResponse
+                    throw MQError.badResponse
                 }
                 return reason
             }
@@ -535,7 +535,7 @@ struct DisconnectPacket: Packet {
                 return DisconnectPacket(reason: .success)
             }
             guard let reasonByte: UInt8 = buffer.readInteger(), let reason = ReasonCode(rawValue: reasonByte) else {
-                throw MQTTError.badResponse
+                throw MQError.badResponse
             }
             let properties = try Properties.read(from: &buffer)
             return DisconnectPacket(reason: reason, properties: properties)
@@ -563,7 +563,7 @@ struct ConnackPacket: Packet {
     }
     static func read(version: MQTT.Version, from packet: IncomingPacket) throws -> Self {
         var remainingData = packet.remainingData
-        guard let bytes = remainingData.readData(length: 2) else { throw MQTTError.badResponse }
+        guard let bytes = remainingData.readData(length: 2) else { throw MQError.badResponse }
         let properties: Properties
         if version == .v5_0 {
             properties = try Properties.read(from: &remainingData)
@@ -599,7 +599,7 @@ struct AuthPacket: Packet {
         guard let reasonByte: UInt8 = remainingData.readInteger(),
               let reason = ReasonCode(rawValue: reasonByte)
         else {
-            throw MQTTError.badResponse
+            throw MQError.badResponse
         }
         let properties = try Properties.read(from: &remainingData)
         return AuthPacket(reason: reason, properties: properties)
@@ -637,7 +637,7 @@ struct IncomingPacket {
     static func read(from byteBuffer: inout DataBuffer) throws -> IncomingPacket {
         guard let byte: UInt8 = byteBuffer.readInteger() else { throw InternalError.incompletePacket }
         guard let type = PacketType(rawValue: byte) ?? PacketType(rawValue: byte & 0xF0) else {
-            throw MQTTError.unrecognisedPacketType
+            throw MQError.unrecognisedPacketType
         }
         let length = try Serializer.readVarint(from: &byteBuffer)
         guard let buffer = byteBuffer.readBuffer(length: length) else { throw InternalError.incompletePacket }
@@ -660,7 +660,7 @@ struct IncomingPacket {
         case .AUTH:
             return try AuthPacket.read(version: version, from: self)
         default:
-            throw MQTTError.decodeError
+            throw MQError.decodeError
         }
     }
 }

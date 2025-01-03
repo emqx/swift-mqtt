@@ -41,8 +41,8 @@ enum Serializer {
     }
     /// read string from bytebuffer
     static func readString(from byteBuffer: inout DataBuffer) throws -> String {
-        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
-        guard let string = byteBuffer.readString(length: Int(length)) else { throw MQTTError.badResponse }
+        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQError.badResponse }
+        guard let string = byteBuffer.readString(length: Int(length)) else { throw MQError.badResponse }
         return string
     }
     
@@ -56,8 +56,8 @@ enum Serializer {
     }
     /// read data from bytebuffer
     static func readBuffer(from byteBuffer: inout DataBuffer) throws -> DataBuffer {
-        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
-        guard let buffer = byteBuffer.readBuffer(length: Int(length)) else { throw MQTTError.badResponse }
+        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQError.badResponse }
+        guard let buffer = byteBuffer.readBuffer(length: Int(length)) else { throw MQError.badResponse }
         return buffer
     }
     
@@ -69,8 +69,8 @@ enum Serializer {
     }
     /// read data from bytebuffer
     static func readData(from byteBuffer: inout DataBuffer) throws -> Data {
-        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.badResponse }
-        guard let data = byteBuffer.readData(length: Int(length)) else { throw MQTTError.badResponse }
+        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQError.badResponse }
+        guard let data = byteBuffer.readData(length: Int(length)) else { throw MQError.badResponse }
         return data
     }
     

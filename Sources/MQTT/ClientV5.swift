@@ -223,7 +223,7 @@ extension MQTT.ClientV5{
     ///
     /// - Parameters:
     ///   - properties: properties to attach to auth packet. Must include `authenticationMethod`
-    ///   - authWorkflow: Respond to auth packets from server
+    ///   - authflow: Respond to auth packets from server
     /// - Returns: final auth packet returned from server
     ///
     @discardableResult
@@ -238,11 +238,11 @@ extension MQTT.ClientV5{
                     return .init(packet)
                 }
                 guard let authflow else {
-                    throw MQTTError.authWorkflowRequired
+                    throw MQError.authflowRequired
                 }
                 return self.client.processAuth(packet, authflow: authflow).then { apkg in
                     guard let auth = apkg as? AuthPacket else {
-                        throw MQTTError.unexpectedMessage
+                        throw MQError.unexpectedMessage
                     }
                     return auth
                 }

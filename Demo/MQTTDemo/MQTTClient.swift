@@ -23,7 +23,6 @@ let mqtt = {
 
 
 extension MQTT.Client{
-
     func publish(_ topic:String,payload:String){
         if let data = payload.data(using: .utf8){
             self.publish(to:topic, payload: data)
