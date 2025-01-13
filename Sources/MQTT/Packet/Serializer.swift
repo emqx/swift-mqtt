@@ -21,6 +21,20 @@ enum Serializer {
             }
         } while value != 0
     }
+    /// read variable length from bytebuffer
+    static func readVarint(from byteBuffer: inout DataBuffer) throws -> Int {
+        var value = 0
+        var shift = 0
+        repeat {
+            guard let byte: UInt8 = byteBuffer.readByte() else { throw InternalError.incompletePacket }
+            value += (Int(byte) & 0x7F) << shift
+            if byte & 0x80 == 0 {
+                break
+            }
+            shift += 7
+        } while true
+        return value
+    }
     static func varintPacketSize(_ value: Int) -> Int {
         var value = value
         var size = 0
@@ -72,20 +86,5 @@ enum Serializer {
         guard let length: UInt16 = byteBuffer.readInteger() else { throw MQError.badResponse }
         guard let data = byteBuffer.readData(length: Int(length)) else { throw MQError.badResponse }
         return data
-    }
-    
-    /// read variable length from bytebuffer
-    static func readVarint(from byteBuffer: inout DataBuffer) throws -> Int {
-        var value = 0
-        var shift = 0
-        repeat {
-            guard let byte: UInt8 = byteBuffer.readByte() else { throw InternalError.incompletePacket }
-            value += (Int(byte) & 0x7F) << shift
-            if byte & 0x80 == 0 {
-                break
-            }
-            shift += 7
-        } while true
-        return value
-    }
+    }    
 }

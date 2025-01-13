@@ -1,5 +1,5 @@
 //
-//  ByteBuffer.swift
+//  DataBuffer.swift
 //  swift-mqtt
 //
 //  Created by supertext on 2024/12/16.
@@ -10,12 +10,13 @@ import Foundation
 @usableFromInline
 struct DataBuffer:Sendable,Equatable{
     @usableFromInline private(set) var data:Data = Data()
-    @usableFromInline var readIndex:Int = 0
+    @usableFromInline var nextIndex:Int = 0
     
     @inlinable
     init(data: Data = Data()) {
         self.data = data
     }
+    
     /// integer read and write
     @inlinable
     mutating func writeByte(_ byte:UInt8) {
@@ -26,15 +27,17 @@ struct DataBuffer:Sendable,Equatable{
         guard self.readableBytes >= 1 else {
             return nil
         }
-        let idx = readIndex
-        readIndex += 1
+        let idx = nextIndex
+        nextIndex += 1
         return self.data[idx]
-    }    
+    }
+    
     /// data read and write
     @inlinable
     mutating func writeData(_ data: Data){
         self.data.append(data)
     }
+    
     /// read all data when length is nil
     @inlinable
     mutating func readData(length:Int? = nil)->Data?{
@@ -42,15 +45,17 @@ struct DataBuffer:Sendable,Equatable{
         guard self.readableBytes >= len else {
             return nil
         }
-        let idx = readIndex
-        readIndex += len
-        return self.data.subdata(in: idx..<readIndex)
+        let idx = nextIndex
+        nextIndex += len
+        return self.data.subdata(in: idx..<nextIndex)
     }
+    
     /// buffer read and write
     @inlinable
     mutating func writeBuffer(_ buffer: inout DataBuffer){
-        buffer.readIndex = buffer.data.count
-        self.data.append(buffer.data)
+        if let data = buffer.readData(){
+            self.data.append(data)
+        }
     }
     @inlinable
     mutating func readBuffer(length:Int)->DataBuffer?{
@@ -59,6 +64,7 @@ struct DataBuffer:Sendable,Equatable{
         }
         return DataBuffer(data: data)
     }
+    
     /// string read and write
     @inlinable
     mutating func writeString(_ string:String){
@@ -71,9 +77,9 @@ struct DataBuffer:Sendable,Equatable{
         guard self.readableBytes >= length else {
             return nil
         }
-        let idx = readIndex
-        readIndex += length
-        return String(data: data.subdata(in: idx..<readIndex), encoding: .utf8)
+        let idx = nextIndex
+        nextIndex += length
+        return String(data: data.subdata(in: idx..<nextIndex), encoding: .utf8)
     }
     
     /// integer read and write
@@ -82,7 +88,7 @@ struct DataBuffer:Sendable,Equatable{
         var int = integer
         var bytes:[UInt8] = []
         let size = MemoryLayout<T>.size
-        for _ in 0..<size{
+        for _ in 0..<size {
             let b = UInt8(truncatingIfNeeded: int & 0xFF)
             int = int >> 8
             bytes.append(b)
@@ -95,16 +101,16 @@ struct DataBuffer:Sendable,Equatable{
         guard self.readableBytes >= length else {
             return nil
         }
-        readIndex += length
+        nextIndex += length
         var result:T = 0
         for i in 0..<length{
-            result = result | (T(data[readIndex - i - 1]) << T(i*8))
+            result = result | (T(data[nextIndex - i - 1]) << T(i*8))
         }
         return result
     }
-    
+    /// 
     @inlinable
     var readableBytes:Int{
-        return data.count-readIndex
+        return data.count-nextIndex
     }
 }

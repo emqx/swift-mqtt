@@ -144,7 +144,7 @@ extension NWProtocolQUIC.Options{
 }
 
 extension MQTT{
-    internal enum Prototype{ case ws,tcp,tls,wss,quic }
+    enum Prototype{ case ws,tcp,tls,wss,quic }
     public struct Endpoint:Sendable{
         let type:Prototype
         public let host:String

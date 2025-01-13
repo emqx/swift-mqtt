@@ -76,9 +76,9 @@ extension MQTT.ClientV5{
     ///    - retain: Whether this is a retained message.
     ///    - properties: properties to attach to publish message
     ///
-    /// - Returns: Future waiting for publish to complete. Depending on QoS setting the future will complete
-    ///     when message is sent, when PUBACK is received or when PUBREC and following PUBCOMP are
-    ///     received. QoS1 and above return an `MQTTAckV5` which contains a `reason` and `properties`
+    /// - Returns: `Promise<AckV5?>` waiting for publish to complete. Depending on `QoS` setting the future will complete
+    ///     when message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are
+    ///     received. `QoS1` and above return an `AckV5` which contains a `reason` and `properties`
     @discardableResult
     public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = [])->Promise<AckV5?>{
         let data = payload.data(using: .utf8) ?? Data()
@@ -93,9 +93,9 @@ extension MQTT.ClientV5{
     ///    - retain: Whether this is a retained message.
     ///    - properties: properties to attach to publish message
     ///
-    /// - Returns: Future waiting for publish to complete. Depending on QoS setting the future will complete
-    ///     when message is sent, when PUBACK is received or when PUBREC and following PUBCOMP are
-    ///     received. QoS1 and above return an `MQTTAckV5` which contains a `reason` and `properties`
+    /// - Returns: `Promise<AckV5?>` waiting for publish to complete. Depending on `QoS` setting the future will complete
+    ///     when message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are
+    ///     received. `QoS1` and above return an `AckV5` which contains a `reason` and `properties`
     @discardableResult
     public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<AckV5?> {
         let message = MQTT.Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: properties)
@@ -109,7 +109,7 @@ extension MQTT.ClientV5{
     ///    - topic: Subscription topic
     ///    - properties: properties to attach to subscribe message
     ///
-    /// - Returns: Future waiting for subscribe to complete. Will wait for SUBACK message from server and
+    /// - Returns: Future waiting for subscribe to complete. Will wait for `SUBACK` message from server and
     ///     return its contents
     @discardableResult
     public func subscribe(to topic:String,qos:MQTTQoS = .atLeastOnce,properties:Properties = [])->Promise<Suback.V5>{
@@ -121,7 +121,7 @@ extension MQTT.ClientV5{
     ///    - subscriptions: Subscription infos
     ///    - properties: properties to attach to subscribe message
     ///
-    /// - Returns: Future waiting for subscribe to complete. Will wait for SUBACK message from server and
+    /// - Returns: Future waiting for subscribe to complete. Will wait for `SUBACK` message from server and
     ///     return its contents
     @discardableResult
     public func subscribe(to subscriptions:[Subscribe.V5],properties:Properties = [])->Promise<Suback.V5>{
@@ -135,7 +135,7 @@ extension MQTT.ClientV5{
     /// - Parameters:
     ///   - topic: Topic to unsubscribe from
     ///   - properties: properties to attach to unsubscribe message
-    /// - Returns: Future waiting for unsubscribe to complete. Will wait for UNSUBACK message from server and
+    /// - Returns: Future waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
     ///     return its contents
     @discardableResult
     public func unsubscribe(from topic:String,properties:Properties = []) -> Promise<Suback.V5> {
@@ -146,7 +146,7 @@ extension MQTT.ClientV5{
     /// - Parameters:
     ///   - topics: List of topic to unsubscribe from
     ///   - properties: properties to attach to unsubscribe message
-    /// - Returns: Future waiting for unsubscribe to complete. Will wait for UNSUBACK message from server and
+    /// - Returns: Future waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
     ///     return its contents
     @discardableResult
     public func unsubscribe(from topics:[String],properties:Properties = []) -> Promise<Suback.V5> {

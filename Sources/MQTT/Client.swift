@@ -324,19 +324,26 @@ extension MQTT.Client {
             return .init(MQError.noConnection)
         }
         self.inflight.add(packet: packet)
-        return self.socket.sendPacket(packet).then{ message in
-            guard message.type != .PUBREC else {
-                throw MQError.unexpectedMessage
+        return self.socket.sendPacket(packet,timeout: self.config.publishTimeout)
+            .then{ message in
+                guard message.type != .PUBREC else {
+                    throw MQError.unexpectedMessage
+                }
+                self.inflight.remove(id: packet.id)
+                guard let pubcomp = message as? PubackPacket else{
+                    throw MQError.unexpectedMessage
+                }
+                if pubcomp.reason.rawValue > 0x7F {
+                    throw MQError.reasonError(pubcomp.reason)
+                }
+                return AckV5(reason: pubcomp.reason, properties: pubcomp.properties)
+            }.catch { err in
+                if case MQError.timeout = err{
+                    //Always try again when timeout
+                    return self.socket.sendPacket(packet,timeout: self.config.publishTimeout)
+                }
+                throw err
             }
-            self.inflight.remove(id: packet.id)
-            guard let pubcomp = message as? PubackPacket else{
-                throw MQError.unexpectedMessage
-            }
-            if pubcomp.reason.rawValue > 0x7F {
-                throw MQError.reasonError(pubcomp.reason)
-            }
-            return AckV5(reason: pubcomp.reason, properties: pubcomp.properties)
-        }
     }
     /// Publish message to topic
     /// - Parameters:
@@ -373,7 +380,7 @@ extension MQTT.Client {
         }
 
         self.inflight.add(packet: packet)
-        return self.socket.sendPacket(packet)
+        return self.socket.sendPacket(packet,timeout: config.publishTimeout)
             .then { message -> PubackPacket in
                 self.inflight.remove(id: packet.id)
                 switch packet.message.qos {
@@ -407,7 +414,8 @@ extension MQTT.Client {
                     self.inflight.remove(id: packet.id)
                 }
                 if case MQError.timeout = error{
-                    // how to resend here
+                    //Always try again when timeout
+                    return self.socket.sendPacket(packet,timeout: self.config.publishTimeout)
                 }
                 throw error
             }

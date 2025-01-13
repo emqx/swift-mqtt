@@ -8,30 +8,28 @@
 import Foundation
 
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-/// AtomLock An `os_unfair_lock` wrapper.
+/// Lock for `os_unfair_lock` wrapper.
 final class Lock{
     private let unfair: os_unfair_lock_t
     deinit {
         unfair.deinitialize(count: 1)
         unfair.deallocate()
     }
-    public init() {
+    init() {
         unfair = .allocate(capacity: 1)
         unfair.initialize(to: os_unfair_lock())
     }
     /// lock
-    public func lock(){
+    func lock(){
         os_unfair_lock_lock(unfair)
     }
     /// unlock
     /// - Important: If `unlock` before `lock`
-    public func unlock(){
+    func unlock(){
         os_unfair_lock_unlock(unfair)
     }
 }
-#endif
-
-#if os(Linux) || os(Windows)
+#else
 public typealias Lock = NSLock
 #endif
 

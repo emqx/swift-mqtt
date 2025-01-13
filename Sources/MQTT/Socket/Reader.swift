@@ -12,7 +12,7 @@ class Reader:@unchecked Sendable{
     private var header:UInt8 = 0
     private var length:Int = 0
     private var multiply = 1
-    private let version:MQTT.Version
+    private var version:MQTT.Version
     private weak var socket:Socket?
     init(_ socket: Socket) {
         self.socket = socket

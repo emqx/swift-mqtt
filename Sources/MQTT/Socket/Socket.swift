@@ -362,7 +362,8 @@ extension Socket{
                 self.onMessage?(pubpkg.message)
             }
         case .exactlyOnce:
-            self.sendPacket(PubackPacket(id:pubpkg.id,type: .PUBREC))
+            let packet = PubackPacket(id:pubpkg.id,type: .PUBREC)
+            self.sendPacket(packet,timeout: self.config.publishTimeout)
                 .then { newpkg in
                     // if we have received the PUBREL we can process the published message. PUBCOMP is sent by `ackPubrel`
                     if newpkg.type == .PUBREL {
@@ -378,6 +379,12 @@ extension Socket{
                 }
                 .then{ msg in
                     self.onMessage?(msg)
+                }.catch { err in
+                    if case MQError.timeout = err{
+                        //Always try again when timeout
+                        return self.sendPacket(packet,timeout: self.config.publishTimeout)
+                    }
+                    throw err
                 }
         }
     }

@@ -76,18 +76,18 @@ extension MQTT{
         public internal(set) var version:MQTT.Version
         /// Version of MQTT server client is connecting to
         public internal(set)var clientId: String
-        /// timeout for server response
-        public var timeout: TimeInterval = 5
         /// MQTT user name.
         public var username: String? = nil
         /// MQTT password.
         public var password: String? = nil
-        /// timeout for server response
-        public var pingTimeout: TimeInterval = 5
         /// enable auto ping
         public var pingEnabled: Bool = true
+        /// timeout second for ping
+        public var pingTimeout: TimeInterval = 5
         /// timeout for connecting to server
         public var connectTimeout: TimeInterval = 5
+        /// timeout millisecond  for pubulish  ack
+        public var publishTimeout: UInt64 = 5000
         /// MQTT keep alive period.
         public var keepAlive: UInt16 = 60{
             didSet{
