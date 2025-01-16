@@ -118,11 +118,11 @@ extension MQTT{
 //        /// decode or encode packet error
         case decodeError(DecodeError)
         /// connect fail with retrun code
-        case connectFail(ConnectRetrunCode)
+        case connectFail(ReasonCode.ConnectV5)
         /// close when network error.
         case networkError(NWError)
         /// recv server disconnect packet or send disconnect packet
-        case disconnect(ReasonCode,Properties)
+        case disconnect(ReasonCode.Disconnect,Properties)
         public var description: String{
             switch self{
             case .disconnect(let code,_):   return "close packet code:\(code)"

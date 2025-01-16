@@ -9,17 +9,16 @@ import Foundation
 import Network
 
 class Reader:@unchecked Sendable{
+    private let conn:NWConnection
     private var header:UInt8 = 0
     private var length:Int = 0
     private var multiply = 1
     private var version:MQTT.Version
-    private weak var socket:Socket?
-    init(_ socket: Socket) {
+    private weak var socket:Socket?//Informal agency
+    init(_ socket: Socket,conn:NWConnection) {
         self.socket = socket
         self.version = socket.config.version
-    }
-    var conn:NWConnection!{
-        return self.socket?.nw
+        self.conn = conn
     }
     func start(){
         switch self.socket?.endpoint.type{
@@ -68,7 +67,7 @@ class Reader:@unchecked Sendable{
         }
         let incoming:IncomingPacket = .init(type: type, flags: self.header & 0xF, remainingData: .init(data: data))
         do {
-            let message = try incoming.transfer(with: self.version)
+            let message = try incoming.packet(with: self.version)
             self.socket?.reader(self, didReceive: message)
         } catch {
             self.socket?.reader(self, didReceive: error)
@@ -109,7 +108,7 @@ class Reader:@unchecked Sendable{
             do {
                 var buffer = DataBuffer(data: data)
                 let incoming = try IncomingPacket.read(from: &buffer)
-                let message = try incoming.transfer(with: self.version)
+                let message = try incoming.packet(with: self.version)
                 self.socket?.reader(self, didReceive: message)
             }catch{
                 self.socket?.reader(self, didReceive: error)

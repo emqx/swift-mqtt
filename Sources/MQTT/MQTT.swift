@@ -103,13 +103,13 @@ extension MQTT{
 extension MQTT{
     class Task:@unchecked Sendable{
         private let promise:Promise<Packet>
-        private var sendPacket: any Packet
+        private var sendPacket: Packet
         private var timeoutItem:DispatchWorkItem?
         init(_ packet:Packet){
             self.promise = .init()
             self.sendPacket = packet
         }
-        func done(with packet: any Packet){
+        func done(with packet: Packet){
             self.promise.done(packet)
             self.timeoutItem?.cancel()
             self.timeoutItem = nil

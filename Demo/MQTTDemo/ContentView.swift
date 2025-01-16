@@ -13,19 +13,19 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 50) {
 
             Button("连接MQTT") {
-                mqtt.open()
+                client.open()
             }
             Button("断开MQTT") {
-                mqtt.close()
+                client.close()
             }
             Button("发送消息") {
-                mqtt.publish(to:"g/u", payload: "hello mqtt",qos: .exactlyOnce)
+                client.publish(to:"g/u", payload: "hello mqtt",qos: .exactlyOnce)
             }
             Button("订阅主题") {
-                mqtt.subscribe(to:"g/u/p/111")
+                client.subscribe(to:"g/u/p/111")
             }
             Button("取消订阅") {
-                mqtt.unsubscribe(from:"g/u/p/111")
+                client.unsubscribe(from:"g/u/p/111")
 
             }
             Button("测试"){

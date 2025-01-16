@@ -25,7 +25,7 @@ extension Properties{
     ///
     public func connect()->Property.Connect{ .init(self) }
     ///
-    /// `PUBACK` properties
+    /// `CONNACK` properties
     ///
     public func connack()->Property.Connack{ .init(self) }
     ///
@@ -123,7 +123,7 @@ public enum Property: Equatable, Sendable {
 }
 
 extension Property {
-    enum ID: UInt8 {
+    enum ID: UInt8 ,Sendable,Equatable{
         case payloadFormat = 1
         case messageExpiry = 2
         case contentType = 3
@@ -152,7 +152,7 @@ extension Property {
         case subscriptionIdentifierAvailable = 41
         case sharedSubscriptionAvailable = 42
     }
-    enum Value: Equatable {
+    enum Value: Sendable,Equatable {
         case byte(UInt8)
         case twoByteInteger(UInt16)
         case fourByteInteger(UInt32)
@@ -370,7 +370,7 @@ extension Property{
     ///
     /// CONNACK properties
     ///
-    public struct Connack{
+    public struct Connack:Sendable,Equatable{
         public var sessionExpiryInterval: UInt32?
         public var receiveMaximum: UInt16?
         public var maximumQoS: MQTTQoS?
@@ -437,7 +437,7 @@ extension Property{
     }
 }
 extension Property{
-    public struct ACK{
+    public struct ACK:Sendable,Equatable{
         public var reasonString: String?
         public var userProperty: [String: String]?
         fileprivate init(_ properties:Properties){
@@ -459,7 +459,7 @@ extension Property{
     }
 }
 extension Property{
-    public struct Publish{
+    public struct Publish:Sendable,Equatable{
         public var payloadFormat: UInt8?
         public var messageExpiry: UInt32?
         public var topicAlias: UInt16?
@@ -532,7 +532,7 @@ extension Property{
 }
 extension Property{
     
-    public struct Auth{
+    public struct Auth:Sendable,Equatable{
         public var authenticationMethod: String?
         public var authenticationData: Data?
         public var reasonString: String?
@@ -579,7 +579,7 @@ extension Property{
     }
 }
 extension Property{
-    public struct Connect{
+    public struct Connect:Sendable,Equatable{
         public var sessionExpiryInterval: UInt32?
         public var receiveMaximum: UInt16?
         public var maximumPacketSize: UInt32?

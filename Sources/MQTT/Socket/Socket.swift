@@ -15,7 +15,7 @@ final class Socket:@unchecked Sendable{
     internal var onError:((Error)->Void)?
     internal var onStatus:((MQTT.Status,MQTT.Status)->Void)?
     internal var onMessage:((MQTT.Message)->Void)?
-    internal var nw:NWConnection?
+    internal var conn:NWConnection?
     internal let endpoint:MQTT.Endpoint
     internal let config:MQTT.Config
 
@@ -42,8 +42,8 @@ final class Socket:@unchecked Sendable{
     }
     deinit {
         self.pinging?.suspend()
-        self.nw?.forceCancel()
-        self.nw = nil
+        self.conn?.forceCancel()
+        self.conn = nil
     }
     var status:MQTT.Status = .closed(.normalClose){
         didSet{
@@ -56,22 +56,22 @@ final class Socket:@unchecked Sendable{
                 case .closed(let reason):
                     self.retrier?.reset()
                     self.pinging?.suspend()
-                    self.nw = nil
+                    self.conn = nil
                     if let task = self.openTask{
                         switch reason{
                         case .networkError(let error):
                             task.done(error)
                         case .connectFail(let code):
-                            task.done(MQError.connectionError(code))
+                            task.done(MQError.connectFailV5(code))
                         case .disconnect(let code, _):
-                            task.done(MQError.reasonError(code))
+                            task.done(MQError.reasonError(.disconnect(code)))
                         default:
                             task.done(MQError.failedToConnect)
                         }
                     }
                     self.openTask = nil
-                    self.nw?.cancel()
-                    self.nw = nil
+                    self.conn?.cancel()
+                    self.conn = nil
                 case .opening:
                     self.pinging?.suspend()
                 case .closing:
@@ -175,9 +175,9 @@ final class Socket:@unchecked Sendable{
         self.lock.lock(); defer { self.lock.unlock() }
         switch self.status{
         case .opened,.opening:
-            if case .ready = self.nw?.state{
+            if case .ready = self.conn?.state{
                 self.status = .closing
-                self.nw?.cancel()
+                self.conn?.cancel()
             }else{
                 self.status = .closed(reason)
             }
@@ -237,8 +237,8 @@ final class Socket:@unchecked Sendable{
         let conn = NWConnection(to: params.0, using: params.1)
         conn.stateUpdateHandler = self.handle(state:)
         conn.start(queue: queue)
-        self.nw = conn
-        self.reader = Reader(self)
+        self.conn = conn
+        self.reader = Reader(self,conn: conn)
     }
 }
 extension Socket{
@@ -328,7 +328,7 @@ extension Socket{
     }
     @discardableResult
     private func send(data:Data,timeout:UInt64)->Promise<Void>{
-        guard let conn = self.nw else{
+        guard let conn = self.conn else{
             return .init(MQError.noConnection)
         }
         let promise = Promise<Void>()
@@ -398,7 +398,7 @@ extension Socket{
         MQTT.Logger.debug("RECV: \(error)")
         self.onError?(error)
     }
-    func reader(_ reader: Reader, didReceive packet: any Packet) {
+    func reader(_ reader: Reader, didReceive packet: Packet) {
         MQTT.Logger.debug("RECV: \(packet)")
         switch packet.type{
         //----------------------------------no need callback--------------------------------------------

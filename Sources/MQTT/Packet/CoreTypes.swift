@@ -116,11 +116,11 @@ public struct Suback: Sendable {
     /// Contains data returned in subscribe/unsubscribe ack packets
     public struct V5: Sendable {
         /// MQTT v5 subscription reason code
-        public let reasons: [ReasonCode]
+        public let reasons: [ReasonCode.Suback]
         /// MQTT v5 properties
         public let properties: Properties
 
-        init(reasons: [ReasonCode], properties: Properties = .init()) {
+        init(reasons: [ReasonCode.Suback], properties: Properties = .init()) {
             self.reasons = reasons
             self.properties = properties
         }
@@ -133,27 +133,23 @@ public struct ConnackV5: Sendable {
     /// is using session state from previous session
     public let sessionPresent: Bool
     /// connect reason code
-    public let reason: ReasonCode
+    public let reason: ReasonCode.ConnectV5
     /// properties
-    public let properties: Properties
+    public let properties: Property.Connack
 }
 
 /// MQTT v5 ACK information. Returned with PUBACK, PUBREL
-public struct AckV5: Sendable,Equatable {
+public struct PubackV5: Sendable ,Equatable{
     /// MQTT v5 reason code
-    public let reason: ReasonCode
+    public let reason: ReasonCode.Puback
     /// MQTT v5 properties
-    public let properties: Properties
+    public let properties: Property.ACK
 
-    init(reason: ReasonCode = .success, properties: Properties = .init()) {
+    init(reason: ReasonCode.Puback = .success, properties: Properties = .init()) {
         self.reason = reason
-        self.properties = properties
+        self.properties = properties.ack()
     }
 }
-
-
-
-
 
 /// MQTT V5 Auth packet
 ///
@@ -162,12 +158,12 @@ public struct AckV5: Sendable,Equatable {
 /// authentication
 public struct AuthV5: Sendable {
     /// MQTT v5 authentication reason code
-    public let reason: ReasonCode
+    public let reason: ReasonCode.Auth
     /// MQTT v5 properties
-    public let properties: Properties
+    public let properties: Property.Auth
 
-    init(reason: ReasonCode, properties: Properties) {
+    init(reason: ReasonCode.Auth, properties: Properties) {
         self.reason = reason
-        self.properties = properties
+        self.properties = properties.auth()
     }
 }

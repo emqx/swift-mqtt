@@ -10,31 +10,27 @@ import Foundation
 
 let client = MQTTClient()
 
-let mqtt = {
-    let m = MQTT.ClientV5("swift-mqtt", endpoint: .quic(host: "172.16.2.7",tls: .trustAll()))
-    m.config.keepAlive = 60
-    m.config.username = "test"
-    m.config.password = "test"
-    m.usingMonitor()
-    m.usingRetrier()
-    MQTT.Logger.level = .debug
-    return m
-}()
 
 
-extension MQTT.Client{
-    func publish(_ topic:String,payload:String){
-        if let data = payload.data(using: .utf8){
-            self.publish(to:topic, payload: data)
-        }
-    }
-    func subscribe(_ topic:String){
-        self.subscribe(to: topic)
-    }
-    func unsubscribe(_ topic:String){
-        self.unsubscribe(from:topic)
+class MQTTClient:MQTT.ClientV5{
+    init() {
+        super.init("swift-mqtt", endpoint: .quic(host: "172.16.2.7",tls: .trustAll()))
+        self.config.keepAlive = 60
+        self.config.username = "test"
+        self.config.password = "test"
+        self.usingMonitor()
+        self.usingRetrier()
+        MQTT.Logger.level = .debug
     }
 }
-class MQTTClient{
-
+extension MQTTClient:MQTT5Delegate{
+    func mqtt(_ mqtt: MQTT.ClientV5, didUpdate status: MQTT.Status, prev: MQTT.Status) {
+        
+    }
+    func mqtt(_ mqtt: MQTT.ClientV5, didReceive error: any Error) {
+        
+    }
+    func mqtt(_ mqtt: MQTT.ClientV5, didReceive error: MQTT.Message) {
+        
+    }
 }

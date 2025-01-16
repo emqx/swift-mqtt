@@ -16,23 +16,26 @@ public protocol MQTT5Delegate:AnyObject{
 }
 
 extension MQTT{
-    public final class ClientV5 : @unchecked Sendable{
-        private let client:Client
-        public var config:Config { self.client.config }
-        public var status:Status { self.client.status }
-        public var isOpened:Bool { self.client.status == .opened }
+    open class ClientV5{
+        private let impl:CoreImpl
+        /// readonly confg
+        public var config:Config { self.impl.config }
+        /// readonly status
+        public var status:Status { self.impl.status }
+        /// readonly
+        public var isOpened:Bool { self.impl.status == .opened }
         public weak var delegate:MQTT5Delegate?{
             didSet{
                 guard let delegate else {
                     return
                 }
-                self.client.socket.onMessage = {msg in
+                self.impl.socket.onMessage = {msg in
                     delegate.mqtt(self, didReceive: msg)
                 }
-                self.client.socket.onError = {err in
+                self.impl.socket.onError = {err in
                     delegate.mqtt(self, didReceive: err)
                 }
-                self.client.socket.onStatus = { new,old in
+                self.impl.socket.onStatus = { new,old in
                     delegate.mqtt(self, didUpdate: new, prev: old)
                 }
             }
@@ -43,8 +46,7 @@ extension MQTT{
         ///   - clientID: Client Identifier
         ///   - endpoint:The network endpoint
         public init(_ clientId: String, endpoint:Endpoint) {
-            self.client = Client(clientId, endpoint: endpoint)
-            self.client.config.version = .v5_0
+            self.impl = CoreImpl(clientId, endpoint: endpoint,version: .v5_0)
         }
         /// Enabling the retry mechanism
         ///
@@ -54,7 +56,7 @@ extension MQTT{
         ///    - filter: filter retry when some code and reason
         ///
         public func usingRetrier(_ policy:Retrier.Policy = .exponential(),limits:UInt = 10,filter:Retrier.Filter? = nil){
-            self.client.usingRetrier(policy,limits: limits,filter: filter)
+            self.impl.usingRetrier(policy,limits: limits,filter: filter)
         }
         /// Enabling the network mornitor mechanism
         ///
@@ -62,7 +64,7 @@ extension MQTT{
         ///    - enable: use monitor or not.
         ///
         public func usingMonitor(_ enable:Bool = true){
-            self.client.usingMonitor(enable)
+            self.impl.usingMonitor(enable)
         }
     }
 }
@@ -80,7 +82,7 @@ extension MQTT.ClientV5{
     ///     when message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are
     ///     received. `QoS1` and above return an `AckV5` which contains a `reason` and `properties`
     @discardableResult
-    public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = [])->Promise<AckV5?>{
+    public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = [])->Promise<PubackV5?>{
         let data = payload.data(using: .utf8) ?? Data()
         return self.publish(to:topic, payload: data,qos: qos,retain: retain,properties: properties)
     }
@@ -97,10 +99,9 @@ extension MQTT.ClientV5{
     ///     when message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are
     ///     received. `QoS1` and above return an `AckV5` which contains a `reason` and `properties`
     @discardableResult
-    public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<AckV5?> {
+    public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<PubackV5?> {
         let message = MQTT.Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: properties)
-        let packet = PublishPacket(id: client.nextPacketId(),message: message)
-        return client.publish(packet: packet)
+        return impl.publish(packet: PublishPacket(id: impl.nextPacketId(), message: message))
     }
     
     /// Subscribe to topic
@@ -109,7 +110,7 @@ extension MQTT.ClientV5{
     ///    - topic: Subscription topic
     ///    - properties: properties to attach to subscribe message
     ///
-    /// - Returns: Future waiting for subscribe to complete. Will wait for `SUBACK` message from server and
+    /// - Returns: `Promise` waiting for subscribe to complete. Will wait for `SUBACK` message from server and
     ///     return its contents
     @discardableResult
     public func subscribe(to topic:String,qos:MQTTQoS = .atLeastOnce,properties:Properties = [])->Promise<Suback.V5>{
@@ -121,12 +122,12 @@ extension MQTT.ClientV5{
     ///    - subscriptions: Subscription infos
     ///    - properties: properties to attach to subscribe message
     ///
-    /// - Returns: Future waiting for subscribe to complete. Will wait for `SUBACK` message from server and
+    /// - Returns: `Promise` waiting for subscribe to complete. Will wait for `SUBACK` message from server and
     ///     return its contents
     @discardableResult
     public func subscribe(to subscriptions:[Subscribe.V5],properties:Properties = [])->Promise<Suback.V5>{
-        let packet = SubscribePacket(subscriptions: subscriptions, properties: properties, id: client.nextPacketId())
-        return client.subscribe(packet: packet).then { suback in
+        let packet = SubscribePacket(id: impl.nextPacketId(), subscriptions: subscriptions, properties: properties)
+        return impl.subscribe(packet: packet).then { suback in
             return Suback.V5(reasons: suback.reasons,properties: properties)
         }
     }
@@ -135,7 +136,7 @@ extension MQTT.ClientV5{
     /// - Parameters:
     ///   - topic: Topic to unsubscribe from
     ///   - properties: properties to attach to unsubscribe message
-    /// - Returns: Future waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
+    /// - Returns: `Promise` waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
     ///     return its contents
     @discardableResult
     public func unsubscribe(from topic:String,properties:Properties = []) -> Promise<Suback.V5> {
@@ -146,12 +147,12 @@ extension MQTT.ClientV5{
     /// - Parameters:
     ///   - topics: List of topic to unsubscribe from
     ///   - properties: properties to attach to unsubscribe message
-    /// - Returns: Future waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
+    /// - Returns: `Promise` waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
     ///     return its contents
     @discardableResult
     public func unsubscribe(from topics:[String],properties:Properties = []) -> Promise<Suback.V5> {
-        let packet = UnsubscribePacket(subscriptions: topics, properties: properties, id: client.nextPacketId())
-        return client.unsubscribe(packet: packet).then { suback in
+        let packet = UnsubscribePacket(id: impl.nextPacketId(), subscriptions: topics, properties: properties)
+        return impl.unsubscribe(packet: packet).then { suback in
             return Suback.V5(reasons: suback.reasons,properties: properties)
         }
     }
@@ -172,7 +173,7 @@ extension MQTT.ClientV5{
     ///   - properties: properties to attach to connect message
     ///   - will: Publish message to be posted as soon as connection is made
     ///   - authflow: The authentication workflow. This is currently unimplemented.
-    /// - Returns: EventLoopFuture to be updated with connack
+    /// - Returns: `Promise` to be updated with connack
     ///
     @discardableResult
     public func open(
@@ -202,22 +203,22 @@ extension MQTT.ClientV5{
             will: publish
         )
 
-        return self.client.open(packet, authflow: authflow).then {
+        return self.impl.open(packet, authflow: authflow).then {
             .init(
                 sessionPresent: $0.sessionPresent,
-                reason: ReasonCode(rawValue: $0.returnCode) ?? .unrecognisedReason,
-                properties: $0.properties
+                reason: ReasonCode.ConnectV5(rawValue: $0.returnCode) ?? .unrecognisedReason,
+                properties: $0.properties.connack()
             )
         }
     }
     /// Close from server
     /// - Parameters:
     ///   - reason: close reason code send to the server
-    /// - Returns: Future waiting on disconnect message to be sent
+    /// - Returns: `Promise` waiting on disconnect message to be sent
     ///
     @discardableResult
     public func close(_ reason:MQTT.CloseReason = .normalClose)->Promise<Void>{
-        self.client.close(reason)
+        self.impl.close(reason)
     }
     /// Re-authenticate with server
     ///
@@ -231,24 +232,6 @@ extension MQTT.ClientV5{
         properties: Properties,
         authflow: (@Sendable (AuthV5) -> Promise<AuthV5>)? = nil
     ) -> Promise<AuthV5> {
-        let authPacket = AuthPacket(reason: .reAuthenticate, properties: properties)
-        return self.client.reAuth(packet: authPacket)
-            .then { packet -> Promise<AuthPacket> in
-                if packet.reason == .success{
-                    return .init(packet)
-                }
-                guard let authflow else {
-                    throw MQError.authflowRequired
-                }
-                return self.client.processAuth(packet, authflow: authflow).then { apkg in
-                    guard let auth = apkg as? AuthPacket else {
-                        throw MQError.unexpectedMessage
-                    }
-                    return auth
-                }
-            }
-            .then { pkg in
-                return AuthV5(reason: pkg.reason, properties: pkg.properties)
-            }
+        self.auth(properties: properties, authflow: authflow)
     }
 }

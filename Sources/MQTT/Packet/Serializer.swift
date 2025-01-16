@@ -26,7 +26,7 @@ enum Serializer {
         var value = 0
         var shift = 0
         repeat {
-            guard let byte: UInt8 = byteBuffer.readByte() else { throw InternalError.incompletePacket }
+            guard let byte: UInt8 = byteBuffer.readByte() else { throw MQError.incompletePacket }
             value += (Int(byte) & 0x7F) << shift
             if byte & 0x80 == 0 {
                 break

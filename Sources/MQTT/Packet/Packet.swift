@@ -7,11 +7,6 @@
 
 import Foundation
 
-enum InternalError: Swift.Error {
-    case incompletePacket
-    case notImplemented
-}
-
 /// MQTT Packet type enumeration
 enum PacketType: UInt8, Sendable {
     case CONNECT = 0x10
@@ -137,7 +132,7 @@ struct ConnectPacket: Packet {
 
     /// read connect packet from incoming packet (not implemented)
     static func read(version: MQTT.Version, from: IncomingPacket) throws -> Self {
-        throw InternalError.notImplemented
+        throw MQError.never
     }
 
     /// calculate size of connect packet
@@ -273,10 +268,10 @@ struct SubscribePacket: Packet {
 
     var type: PacketType { .SUBSCRIBE }
     var description: String { "SUBSCRIBE" }
-
+    let id: UInt16
     let subscriptions: [Subscribe.V5]
     let properties: Properties?
-    let id: UInt16
+    
 
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
         writeFixedHeader(packetType: .SUBSCRIBE, size: self.packetSize(version: version), to: &byteBuffer)
@@ -304,7 +299,7 @@ struct SubscribePacket: Packet {
     }
 
     static func read(version: MQTT.Version, from packet: IncomingPacket) throws -> Self {
-        throw InternalError.notImplemented
+        throw MQError.never
     }
 
     /// calculate size of subscribe packet
@@ -326,11 +321,9 @@ struct SubscribePacket: Packet {
 struct UnsubscribePacket: Packet {
     var type: PacketType { .UNSUBSCRIBE }
     var description: String { "UNSUBSCRIBE" }
-
+    let id: UInt16
     let subscriptions: [String]
     let properties: Properties?
-    let id: UInt16
-
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
         writeFixedHeader(packetType: .UNSUBSCRIBE, size: self.packetSize(version: version), to: &byteBuffer)
         // write variable header
@@ -347,7 +340,7 @@ struct UnsubscribePacket: Packet {
     }
 
     static func read(version: MQTT.Version, from packet: IncomingPacket) throws -> Self {
-        throw InternalError.notImplemented
+        throw MQError.never
     }
 
     /// calculate size of subscribe packet
@@ -370,13 +363,13 @@ struct PubackPacket: Packet {
     var description: String { "\(self.type)(id:\(id),reason:\(reason))" }
     let type: PacketType
     let id: UInt16
-    let reason: ReasonCode
+    let reason: ReasonCode.Puback
     let properties: Properties
 
     init(
         id: UInt16,
         type: PacketType,
-        reason: ReasonCode = .success,
+        reason: ReasonCode.Puback = .success,
         properties: Properties = .init()
     ) {
         self.type = type
@@ -407,7 +400,7 @@ struct PubackPacket: Packet {
                 return PubackPacket(id: packetId, type: packet.type)
             }
             guard let reasonByte: UInt8 = remainingData.readInteger(),
-                  let reason = ReasonCode(rawValue: reasonByte)
+                  let reason = ReasonCode.Puback(rawValue: reasonByte)
             else {
                 throw MQError.badResponse
             }
@@ -431,10 +424,10 @@ struct SubackPacket: Packet {
     var description: String { "\(self.type)(id:\(id),reason:\(reasons))" }
     let type: PacketType
     let id: UInt16
-    let reasons: [ReasonCode]
+    let reasons: [ReasonCode.Suback]
     let properties: Properties
 
-    init(type: PacketType, packetId: UInt16, reasons: [ReasonCode], properties: Properties = .init()) {
+    init(type: PacketType, packetId: UInt16, reasons: [ReasonCode.Suback], properties: Properties = .init()) {
         self.type = type
         self.id = packetId
         self.reasons = reasons
@@ -442,7 +435,7 @@ struct SubackPacket: Packet {
     }
 
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
-        throw InternalError.notImplemented
+        throw MQError.never
     }
 
     static func read(version: MQTT.Version, from packet: IncomingPacket) throws -> Self {
@@ -454,10 +447,10 @@ struct SubackPacket: Packet {
         } else {
             properties = .init()
         }
-        var reasons: [ReasonCode]?
+        var reasons: [ReasonCode.Suback]?
         if let reasonBytes = remainingData.readData() {
-            reasons = try reasonBytes.map { byte -> ReasonCode in
-                guard let reason = ReasonCode(rawValue: byte) else {
+            reasons = try reasonBytes.map { byte -> ReasonCode.Suback in
+                guard let reason = ReasonCode.Suback(rawValue: byte) else {
                     throw MQError.badResponse
                 }
                 return reason
@@ -483,7 +476,7 @@ struct PingreqPacket: Packet {
     }
 
     static func read(version: MQTT.Version, from packet: IncomingPacket) throws -> Self {
-        throw InternalError.notImplemented
+        throw MQError.never
     }
 
     var packetSize: Int { 0 }
@@ -507,10 +500,10 @@ struct PingrespPacket: Packet {
 struct DisconnectPacket: Packet {
     var type: PacketType { .DISCONNECT }
     var description: String { "DISCONNECT(reason:\(reason))" }
-    let reason: ReasonCode
+    let reason: ReasonCode.Disconnect
     let properties: Properties
 
-    init(reason: ReasonCode = .success, properties: Properties = .init()) {
+    init(reason: ReasonCode.Disconnect = .normal, properties: Properties = .init()) {
         self.reason = reason
         self.properties = properties
     }
@@ -518,7 +511,7 @@ struct DisconnectPacket: Packet {
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
         writeFixedHeader(packetType: self.type, size: self.packetSize(version: version), to: &byteBuffer)
         if version == .v5_0,
-           self.reason != .success || self.properties.count > 0
+           self.reason != .normal || self.properties.count > 0
         {
             byteBuffer.writeInteger(self.reason.rawValue)
             try self.properties.write(to: &byteBuffer)
@@ -532,9 +525,9 @@ struct DisconnectPacket: Packet {
             return DisconnectPacket()
         case .v5_0:
             if buffer.readableBytes == 0 {
-                return DisconnectPacket(reason: .success)
+                return DisconnectPacket(reason: .normal)
             }
-            guard let reasonByte: UInt8 = buffer.readInteger(), let reason = ReasonCode(rawValue: reasonByte) else {
+            guard let reasonByte: UInt8 = buffer.readInteger(), let reason = ReasonCode.Disconnect(rawValue: reasonByte) else {
                 throw MQError.badResponse
             }
             let properties = try Properties.read(from: &buffer)
@@ -543,7 +536,7 @@ struct DisconnectPacket: Packet {
     }
 
     func packetSize(version: MQTT.Version) -> Int {
-        if version == .v5_0, self.reason != .success || self.properties.count > 0{
+        if version == .v5_0, self.reason != .normal || self.properties.count > 0{
             let propertiesPacketSize = self.properties.packetSize
             return 1 + Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
         }
@@ -559,7 +552,7 @@ struct ConnackPacket: Packet {
     let properties: Properties
     var sessionPresent: Bool { self.acknowledgeFlags & 0x1 == 0x1 }
     func write(version: MQTT.Version, to: inout DataBuffer) throws {
-        throw InternalError.notImplemented
+        throw MQError.never
     }
     static func read(version: MQTT.Version, from packet: IncomingPacket) throws -> Self {
         var remainingData = packet.remainingData
@@ -581,7 +574,7 @@ struct ConnackPacket: Packet {
 struct AuthPacket: Packet {
     var type: PacketType { .AUTH }
     var description: String { "AUTH(reason:\(reason))" }
-    let reason: ReasonCode
+    let reason: ReasonCode.Auth
     let properties: Properties
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
         writeFixedHeader(packetType: self.type, size: self.packetSize, to: &byteBuffer)
@@ -597,7 +590,7 @@ struct AuthPacket: Packet {
             return AuthPacket(reason: .success, properties: .init())
         }
         guard let reasonByte: UInt8 = remainingData.readInteger(),
-              let reason = ReasonCode(rawValue: reasonByte)
+              let reason = ReasonCode.Auth(rawValue: reasonByte)
         else {
             throw MQError.badResponse
         }
@@ -628,22 +621,22 @@ struct IncomingPacket {
         byteBuffer.writeBuffer(&buffer)
     }
     static func read(version: MQTT.Version, from packet: IncomingPacket) throws -> Self {
-        throw InternalError.notImplemented
+        throw MQError.never
     }
     /// read incoming packet
     ///
     /// read fixed header and data attached. Throws incomplete packet error if if cannot read
     /// everything
     static func read(from byteBuffer: inout DataBuffer) throws -> IncomingPacket {
-        guard let byte: UInt8 = byteBuffer.readInteger() else { throw InternalError.incompletePacket }
+        guard let byte: UInt8 = byteBuffer.readInteger() else { throw MQError.incompletePacket }
         guard let type = PacketType(rawValue: byte) ?? PacketType(rawValue: byte & 0xF0) else {
             throw MQError.unrecognisedPacketType
         }
         let length = try Serializer.readVarint(from: &byteBuffer)
-        guard let buffer = byteBuffer.readBuffer(length: length) else { throw InternalError.incompletePacket }
+        guard let buffer = byteBuffer.readBuffer(length: length) else { throw MQError.incompletePacket }
         return IncomingPacket(type: type, flags: byte & 0xF, remainingData: buffer)
     }
-    func transfer(with version:MQTT.Version)throws -> Packet{
+    func packet(with version:MQTT.Version)throws -> Packet{
         switch self.type {
         case .PUBLISH:
             return try PublishPacket.read(version: version, from: self)
