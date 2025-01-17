@@ -69,11 +69,11 @@ extension MQTT{
 extension MQTT.ClientV3{
     /// Close from server
     /// - Parameters:
-    ///   - reason: close reason code send to the server
+    ///   - code: close reason code send to the server
     /// - Returns: `Promise` waiting on disconnect message to be sent
     @discardableResult
-    public func close(_ reason:MQTT.CloseReason = .normalClose)->Promise<Void>{
-        self.impl.close(reason)
+    public func close(_ code:ReasonCode.Disconnect = .normal)->Promise<Void>{
+        self.impl.close(code,properties: [])
     }
     /// Connect to MQTT server
     ///
@@ -91,11 +91,7 @@ extension MQTT.ClientV3{
     /// - Returns: `Promise` to be updated with whether server holds a session for this client
     ///
     @discardableResult
-    public func open(
-        will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool)? = nil,
-        cleanStart: Bool = true
-    ) -> Promise<Bool> {
-        
+    public func open( will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool)? = nil, cleanStart: Bool = true ) -> Promise<Bool> {
         let message = will.map {
             MQTT.Message(
                 qos: .atMostOnce,

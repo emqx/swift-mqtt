@@ -42,7 +42,7 @@ class Reader:@unchecked Sendable{
             if byte & 0x80 != 0{
                 let result = self.multiply.multipliedReportingOverflow(by: 0x80)
                 if result.overflow {
-                    self.socket?.reader(self, didReceive: DecodeError.varintOverflow)
+                    self.socket?.reader(self, didReceive: MQTTError.decodeError(.varintOverflow))
                     return
                 }
                 self.multiply = result.partialValue
@@ -62,7 +62,7 @@ class Reader:@unchecked Sendable{
     }
     private func dispath(data:Data){
         guard let type = PacketType(rawValue: self.header & 0xF0) else {
-            self.socket?.reader(self, didReceive: DecodeError.unrecognisedPacketType)
+            self.socket?.reader(self, didReceive: MQTTError.decodeError(.unrecognisedPacketType))
             return
         }
         let incoming:IncomingPacket = .init(type: type, flags: self.header & 0xF, remainingData: .init(data: data))
@@ -84,11 +84,11 @@ class Reader:@unchecked Sendable{
                 return
             }
             if let error{
-                self.socket?.reader(self, didReceive: DecodeError.networkError(error))
+                self.socket?.reader(self, didReceive: MQTTError.decodeError(.networkError(error)))
                 return
             }
             guard let data = content,data.count == length else{
-                self.socket?.reader(self, didReceive: DecodeError.unexpectedDataLength)
+                self.socket?.reader(self, didReceive: MQTTError.decodeError(.unexpectedDataLength))
                 return
             }
             finish?(data)
@@ -98,11 +98,11 @@ class Reader:@unchecked Sendable{
         conn.receiveMessage {[weak self] content, contentContext, isComplete, error in
             guard let self else{ return }
             if let error{
-                self.socket?.reader(self, didReceive: DecodeError.networkError(error))
+                self.socket?.reader(self, didReceive: MQTTError.decodeError(.networkError(error)))
                 return
             }
             guard let data = content else{
-                self.socket?.reader(self, didReceive: DecodeError.unexpectedDataLength)
+                self.socket?.reader(self, didReceive: MQTTError.decodeError(.unexpectedDataLength))
                 return
             }
             do {

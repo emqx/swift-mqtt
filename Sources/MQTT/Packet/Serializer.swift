@@ -26,7 +26,7 @@ enum Serializer {
         var value = 0
         var shift = 0
         repeat {
-            guard let byte: UInt8 = byteBuffer.readByte() else { throw MQError.incompletePacket }
+            guard let byte: UInt8 = byteBuffer.readByte() else { throw MQTTError.incompletePacket }
             value += (Int(byte) & 0x7F) << shift
             if byte & 0x80 == 0 {
                 break
@@ -47,44 +47,44 @@ enum Serializer {
     /// write string to byte buffer
     static func writeString(_ string: String, to byteBuffer: inout DataBuffer) throws {
         guard let data = string.data(using: .utf8) else{
-            throw PacketError.badParameter
+            throw MQTTError.packetError(.badParameter)
         }
-        guard data.count < 65536 else { throw PacketError.badParameter}
+        guard data.count < 65536 else { throw MQTTError.packetError(.badParameter)}
         byteBuffer.writeInteger(UInt16(data.count))
         byteBuffer.writeData(data)
     }
     /// read string from bytebuffer
     static func readString(from byteBuffer: inout DataBuffer) throws -> String {
-        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQError.badResponse }
-        guard let string = byteBuffer.readString(length: Int(length)) else { throw MQError.badResponse }
+        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.decodeError(.unexpectedTokens) }
+        guard let string = byteBuffer.readString(length: Int(length)) else { throw MQTTError.decodeError(.unexpectedTokens) }
         return string
     }
     
     /// write buffer to byte buffer
     static func writeBuffer(_ buffer: DataBuffer, to byteBuffer: inout DataBuffer) throws {
         let length = buffer.readableBytes
-        guard length < 65536 else { throw PacketError.badParameter }
+        guard length < 65536 else { throw MQTTError.packetError(.badParameter) }
         var buffer = buffer
         byteBuffer.writeInteger(UInt16(length))
         byteBuffer.writeBuffer(&buffer)
     }
     /// read data from bytebuffer
     static func readBuffer(from byteBuffer: inout DataBuffer) throws -> DataBuffer {
-        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQError.badResponse }
-        guard let buffer = byteBuffer.readBuffer(length: Int(length)) else { throw MQError.badResponse }
+        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.decodeError(.unexpectedTokens) }
+        guard let buffer = byteBuffer.readBuffer(length: Int(length)) else { throw MQTTError.decodeError(.unexpectedTokens) }
         return buffer
     }
     
     /// write data
     static func writeData(_ data: Data, to byteBuffer: inout DataBuffer) throws {
-        guard data.count < 65536 else { throw PacketError.badParameter }
+        guard data.count < 65536 else { throw MQTTError.packetError(.badParameter) }
         byteBuffer.writeInteger(UInt16(data.count))
         byteBuffer.writeData(data)
     }
     /// read data from bytebuffer
     static func readData(from byteBuffer: inout DataBuffer) throws -> Data {
-        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQError.badResponse }
-        guard let data = byteBuffer.readData(length: Int(length)) else { throw MQError.badResponse }
+        guard let length: UInt16 = byteBuffer.readInteger() else { throw MQTTError.decodeError(.unexpectedTokens) }
+        guard let data = byteBuffer.readData(length: Int(length)) else { throw MQTTError.decodeError(.unexpectedTokens) }
         return data
     }    
 }

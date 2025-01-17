@@ -55,20 +55,18 @@ extension MQTT{
         }
         /// Close from server
         /// - Parameters:
-        ///   - reason: close reason code send to the server
+        ///   - code: close reason code send to the server
         /// - Returns: `Promise` waiting on disconnect message to be sent
-        func close(_ reason:MQTT.CloseReason = .normalClose)->Promise<Void>{
-            var packet = DisconnectPacket()
-            if case .disconnect(let reasonCode, let properties) = reason{
-                switch config.version {
-                case .v5_0:
-                    packet = .init(reason: reasonCode,properties: properties)
-                case .v3_1_1:
-                    packet = .init(reason: reasonCode)
-                }
+        func close(_ code:ReasonCode.Disconnect = .normal,properties:Properties)->Promise<Void>{
+            var packet:DisconnectPacket
+            switch config.version {
+            case .v5_0:
+                packet = .init(reason: code,properties: properties)
+            case .v3_1_1:
+                packet = .init(reason: code)
             }
             return self.socket.sendNoWait(packet).map { _ in
-                self.socket.directClose(reason: reason)
+                self.socket.directClose(reason: .clientClosed(code, properties))
                 return Promise(())
             }
         }
@@ -90,11 +88,11 @@ extension MQTT{
                         return .init(packet)
                     }
                     guard let authflow else {
-                        throw MQError.authflowRequired
+                        throw MQTTError.authflowRequired
                     }
                     return self.processAuth(packet, authflow: authflow).then {
                         guard let auth = $0 as? AuthPacket else{
-                            throw MQError.unexpectedMessage
+                            throw MQTTError.unexpectedMessage
                         }
                         return auth
                     }
@@ -120,15 +118,15 @@ extension MQTT.CoreImpl {
                 return Promise<ConnackPacket>(try self.processConnack(connack))
             case let auth as AuthPacket:
                 // auth messages require an auth workflow closure
-                guard let authflow else { throw MQError.authflowRequired}
+                guard let authflow else { throw MQTTError.authflowRequired}
                 return self.processAuth(auth, authflow: authflow).then({ result in
                     if let packet = result as? ConnackPacket{
                         return packet
                     }
-                    throw MQError.unexpectedMessage
+                    throw MQTTError.unexpectedMessage
                 })
             default:
-                throw MQError.unexpectedMessage
+                throw MQTTError.unexpectedMessage
             }
         }
     }
@@ -166,12 +164,12 @@ extension MQTT.CoreImpl {
         case .v3_1_1:
             if connack.returnCode != 0 {
                 let returnCode = ReasonCode.Connect(rawValue: connack.returnCode) ?? .unrecognisedReason
-                throw MQError.connectFailV3(returnCode)
+                throw MQTTError.connectFailV3(returnCode)
             }
         case .v5_0:
             if connack.returnCode > 0x7F {
                 let returnCode = ReasonCode.ConnectV5(rawValue: connack.returnCode) ?? .unrecognisedReason
-                throw MQError.connectFailV5(returnCode)
+                throw MQTTError.connectFailV5(returnCode)
             }
         }
         for property in connack.properties {
@@ -204,24 +202,24 @@ extension MQTT.CoreImpl {
    
     func pubRel(packet: PubackPacket) -> Promise<PubackV5?> {
         guard socket.status == .opened else {
-            return .init(MQError.noConnection)
+            return .init(MQTTError.noConnection)
         }
         self.inflight.add(packet: packet)
         return self.socket.sendPacket(packet,timeout: self.config.publishTimeout)
             .then{
                 guard $0.type != .PUBREC else {
-                    throw MQError.unexpectedMessage
+                    throw MQTTError.unexpectedMessage
                 }
                 self.inflight.remove(id: packet.id)
                 guard let pubcomp = $0 as? PubackPacket,pubcomp.type == .PUBCOMP else{
-                    throw MQError.unexpectedMessage
+                    throw MQTTError.unexpectedMessage
                 }
                 if pubcomp.reason.rawValue > 0x7F {
-                    throw MQError.reasonError(.puback(pubcomp.reason))
+                    throw MQTTError.reasonError(.puback(pubcomp.reason))
                 }
                 return PubackV5(reason: pubcomp.reason, properties: pubcomp.properties)
             }.catch { err in
-                if case MQError.timeout = err{
+                if case MQTTError.timeout = err{
                     //Always try again when timeout
                     return self.socket.sendPacket(packet,timeout: self.config.publishTimeout)
                 }
@@ -232,30 +230,30 @@ extension MQTT.CoreImpl {
     /// - Parameters:
     ///     - packet: Publish packet
     func publish(packet: PublishPacket) -> Promise<PubackV5?> {
-        guard socket.status == .opened else { return .init(MQError.noConnection) }
+        guard socket.status == .opened else { return .init(MQTTError.noConnection) }
         // check publish validity
         // check qos against server max qos
         guard self.connParams.maxQoS.rawValue >= packet.message.qos.rawValue else {
-            return .init(PacketError.qosInvalid)
+            return .init(MQTTError.packetError(.qosInvalid))
         }
         // check if retain is available
         guard packet.message.retain == false || self.connParams.retainAvailable else {
-            return .init(PacketError.retainUnavailable)
+            return .init(MQTTError.packetError(.retainUnavailable))
         }
         for p in packet.message.properties {
             // check topic alias
             if case .topicAlias(let alias) = p {
                 guard alias <= self.connParams.maxTopicAlias, alias != 0 else {
-                    return .init(PacketError.topicAliasOutOfRange)
+                    return .init(MQTTError.packetError(.topicAliasOutOfRange))
                 }
             }
             if case .subscriptionIdentifier = p {
-                return .init(PacketError.publishIncludesSubscription)
+                return .init(MQTTError.packetError(.publishIncludesSubscription))
             }
         }
         // check topic name
         guard !packet.message.topic.contains(where: { $0 == "#" || $0 == "+" }) else {
-            return .init(PacketError.invalidTopicName)
+            return .init(MQTTError.packetError(.invalidTopicName))
         }
         if packet.message.qos == .atMostOnce {
             return self.socket.sendNoWait(packet).then { nil }
@@ -267,21 +265,21 @@ extension MQTT.CoreImpl {
                 self.inflight.remove(id: packet.id)
                 switch packet.message.qos {
                 case .atMostOnce:
-                    throw MQError.unexpectedMessage
+                    throw MQTTError.unexpectedMessage
                 case .atLeastOnce:
                     guard message.type == .PUBACK else {
-                        throw MQError.unexpectedMessage
+                        throw MQTTError.unexpectedMessage
                     }
                 case .exactlyOnce:
                     guard message.type == .PUBREC else {
-                        throw MQError.unexpectedMessage
+                        throw MQTTError.unexpectedMessage
                     }
                 }
                 guard let puback = message as? PubackPacket else{
-                    throw MQError.unexpectedMessage
+                    throw MQTTError.unexpectedMessage
                 }
                 if puback.reason.rawValue > 0x7F {
-                    throw MQError.reasonError(.puback(puback.reason))
+                    throw MQTTError.reasonError(.puback(puback.reason))
                 }
                 return puback
             }
@@ -292,10 +290,10 @@ extension MQTT.CoreImpl {
                 return .init(PubackV5(reason: puback.reason, properties: puback.properties))
             }
             .catch { error in
-                if case MQError.serverDisconnection(let ack) = error, ack == .malformedPacket{
+                if case MQTTError.serverDisconnection(let ack) = error, ack == .malformedPacket{
                     self.inflight.remove(id: packet.id)
                 }
-                if case MQError.timeout = error{
+                if case MQTTError.timeout = error{
                     //Always try again when timeout
                     return self.socket.sendPacket(packet,timeout: self.config.publishTimeout)
                 }
@@ -307,13 +305,13 @@ extension MQTT.CoreImpl {
     /// - Returns: Future waiting for subscribe to complete. Will wait for SUBACK message from server
     func subscribe(packet: SubscribePacket) -> Promise<SubackPacket> {
         guard packet.subscriptions.count > 0 else {
-            return .init((PacketError.atLeastOneTopicRequired))
+            return .init(MQTTError.packetError(.atLeastOneTopicRequired))
         }
         return self.socket.sendPacket(packet).then {
             if let suback = $0 as? SubackPacket {
                 return suback
             }
-            throw MQError.unexpectedMessage
+            throw MQTTError.unexpectedMessage
         }
     }
     /// Subscribe to topic
@@ -321,13 +319,13 @@ extension MQTT.CoreImpl {
     /// - Returns: Future waiting for subscribe to complete. Will wait for SUBACK message from server
     func unsubscribe(packet: UnsubscribePacket) -> Promise<SubackPacket> {
         guard packet.subscriptions.count > 0 else {
-            return .init((PacketError.atLeastOneTopicRequired))
+            return .init(MQTTError.packetError(.atLeastOneTopicRequired))
         }
         return self.socket.sendPacket(packet).then {
             if let suback = $0 as? SubackPacket {
                 return suback
             }
-            throw MQError.unexpectedMessage
+            throw MQTTError.unexpectedMessage
         }
     }
     
@@ -336,12 +334,12 @@ extension MQTT.CoreImpl {
     }
     
     func reAuth(packet: AuthPacket) -> Promise<AuthPacket> {
-        guard socket.status == .opened else { return .init(MQError.noConnection) }
+        guard socket.status == .opened else { return .init(MQTTError.noConnection) }
         return self.socket.sendPacket(packet).then { ack in
             if let authack = ack as? AuthPacket{
                 return authack
             }
-            throw MQError.failedToConnect
+            throw MQTTError.failedToConnect
         }
     }
     
@@ -363,10 +361,10 @@ extension MQTT.CoreImpl {
                         case .success:
                             promise.done(auth)
                         default:
-                            promise.done(MQError.badResponse)
+                            promise.done(MQTTError.decodeError(.unexpectedTokens))
                         }
                     default:
-                        promise.done(MQError.unexpectedMessage)
+                        promise.done(MQTTError.unexpectedMessage)
                     }
                 }
         }

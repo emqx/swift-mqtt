@@ -9,9 +9,11 @@ import Network
 import Foundation
 
 extension MQTT{
+    ///
+    /// The retries filter out some cases that definitely do not need to be retried, and the rest need to be filtered by the user.
+    /// The unfiltered cases are considered to need to be retried
     public final class Retrier:@unchecked Sendable{
-        /// Retry filter
-        /// Tell me true if the reason need retry
+        /// Filter out causes that do not need to be repeated, and return true if retries are not required
         public typealias Filter = @Sendable (MQTT.CloseReason)->Bool
         /// Retry backoff policy
         public enum Policy:Sendable{
@@ -29,9 +31,10 @@ extension MQTT{
         public let policy:Policy
         /// retry limit times
         public let limits:UInt
-        /// fillter when check  retry
+        /// Filter when check  retry
+        /// Filter out causes that do not need to be retry, and return true if retries are not required
         ///
-        /// - Important: return true means no retry
+        /// - Important: return true means no need to be retried. false or nil means need to be retried
         ///
         public let filter:Filter?
         /// create a retrier
@@ -50,7 +53,7 @@ extension MQTT{
         func reset(){
             self.times = 0
         }
-        /// get retry delay. nil means not retry
+        /// get retry delay. nil means don't retry
         func retry(when reason:MQTT.CloseReason) -> TimeInterval? {
             if self.filter?(reason) == true {
                 return nil

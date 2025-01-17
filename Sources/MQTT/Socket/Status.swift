@@ -97,7 +97,7 @@ extension MQTT{
         case opened
         case opening
         case closing
-        case closed(CloseReason)
+        case closed(CloseReason? = nil)
         public var description: String{
             switch self{
             case .opening: return "opening"
@@ -109,29 +109,30 @@ extension MQTT{
     }
     ///  close reason
     public enum CloseReason:Sendable,Equatable,CustomStringConvertible{
-        /// normal cllose default state
-        case normalClose
         /// close when ping timeout
         case pingTimeout
         /// auto close by network monitor when network unsatisfied
         case unsatisfied
-//        /// decode or encode packet error
-        case decodeError(DecodeError)
-        /// connect fail with retrun code
-        case connectFail(ReasonCode.ConnectV5)
         /// close when network error.
         case networkError(NWError)
-        /// recv server disconnect packet or send disconnect packet
-        case disconnect(ReasonCode.Disconnect,Properties)
+        /// decode or encode packet error
+        case decodeError(MQTTError.Decode)
+        /// connect fail with retrun code
+        case connectFail(ReasonCode.ConnectV5)
+        /// The client actively closes the connection
+        case clientClosed(ReasonCode.Disconnect,Properties)
+        /// The server actively closes the connection and receive disconnect packet 
+        case serverClosed(ReasonCode.Disconnect,Properties)
         public var description: String{
             switch self{
-            case .disconnect(let code,_):   return "close packet code:\(code)"
-            case .normalClose: return "normal close"
             case .unsatisfied: return "network unsatisfied"
             case .pingTimeout: return "ping timeout"
-            case .decodeError(let error): return error.localizedDescription
+            case .decodeError(let error): return "\(error)"
             case .connectFail(let code):  return "connect error code:\(code)"
             case .networkError(let error): return error.localizedDescription
+            case .serverClosed(let code,_):   return "close packet code:\(code)"
+            case .clientClosed(let code,_):   return "close packet code:\(code)"
+
             }
         }
     }

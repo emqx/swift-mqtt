@@ -122,7 +122,7 @@ extension MQTT{
         func start(_ timeout:UInt64? = nil) -> Promise<Packet>{
             if let timeout{
                 let item = DispatchWorkItem{
-                    self.promise.done(MQError.timeout)
+                    self.promise.done(MQTTError.timeout)
                 }
                 DispatchQueue.global().asyncAfter(deadline: .now()+TimeInterval(timeout), execute: item)
                 self.timeoutItem = item
@@ -131,28 +131,29 @@ extension MQTT{
         }
     }
 }
-/// Array of inflight packets. Used to resend packets when reconnecting to server
-struct Inflight : Sendable{
-    @Atomic
-    private(set) var packets: [Packet] = []
-    /// add packet
-    func add(packet: Packet) {
-        self.$packets.write { pkgs in
-            pkgs.append(packet)
+extension MQTT{
+    /// Array of inflight packets. Used to resend packets when reconnecting to server
+    struct Inflight : Sendable{
+        @Atomic
+        private(set) var packets: [Packet] = []
+        /// add packet
+        func add(packet: Packet) {
+            self.$packets.write { pkgs in
+                pkgs.append(packet)
+            }
+        }
+        /// remove packert
+        func remove(id: UInt16) {
+            self.$packets.write { pkgs in
+                guard let first = pkgs.firstIndex(where: { $0.id == id }) else { return }
+                pkgs.remove(at: first)
+            }
+        }
+        /// remove all packets
+        func clear() {
+            self.$packets.write { pkgs in
+                pkgs = []
+            }
         }
     }
-    /// remove packert
-    func remove(id: UInt16) {
-        self.$packets.write { pkgs in
-            guard let first = pkgs.firstIndex(where: { $0.id == id }) else { return }
-            pkgs.remove(at: first)
-        }
-    }
-    /// remove all packets
-    func clear() {
-        self.$packets.write { pkgs in
-            pkgs = []
-        }
-    }
-
 }

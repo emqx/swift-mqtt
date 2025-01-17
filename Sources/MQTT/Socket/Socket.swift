@@ -45,7 +45,7 @@ final class Socket:@unchecked Sendable{
         self.conn?.forceCancel()
         self.conn = nil
     }
-    var status:MQTT.Status = .closed(.normalClose){
+    var status:MQTT.Status = .closed(){
         didSet{
             if oldValue != status {
                 MQTT.Logger.debug("Status changed: \(oldValue) --> \(status)")
@@ -62,11 +62,11 @@ final class Socket:@unchecked Sendable{
                         case .networkError(let error):
                             task.done(error)
                         case .connectFail(let code):
-                            task.done(MQError.connectFailV5(code))
-                        case .disconnect(let code, _):
-                            task.done(MQError.reasonError(.disconnect(code)))
+                            task.done(MQTTError.connectFailV5(code))
+                        case .serverClosed(let code,_):
+                            task.done(MQTTError.reasonError(.disconnect(code)))
                         default:
-                            task.done(MQError.failedToConnect)
+                            task.done(MQTTError.failedToConnect)
                         }
                     }
                     self.openTask = nil
@@ -85,9 +85,9 @@ final class Socket:@unchecked Sendable{
         self.lock.lock(); defer { self.lock.unlock() }
         switch self.status{
         case .opened:
-            return .init(MQError.alreadyConnected)
+            return .init(MQTTError.alreadyConnected)
         case .opening:
-            return .init(MQError.alreadyConnecting)
+            return .init(MQTTError.alreadyConnecting)
         default:
             break
         }
@@ -120,7 +120,7 @@ final class Socket:@unchecked Sendable{
         case .cancelled:
             // This is the network telling us we're closed. We don't need to actually do anything here
             // other than check our state is ok.
-            self.status = .closed(.normalClose)
+            self.status = .closed()
         case .failed(let error):
             // The connection has failed for some reason.
             self.tryClose(reason: .networkError(error))
@@ -134,7 +134,7 @@ final class Socket:@unchecked Sendable{
             self.status = .opening
         case .setup:
             /// inital state
-            self.status = .closed(.normalClose)
+            self.status = .closed()
         case .waiting(let error):
             if case .opening = self.status {
                 // This means the connection cannot currently be completed. We should notify the pipeline
@@ -171,7 +171,7 @@ final class Socket:@unchecked Sendable{
         self.reader?.start()
     }
     /// Close network connection diirectly
-    func directClose(reason:MQTT.CloseReason){
+    func directClose(reason:MQTT.CloseReason?){
         self.lock.lock(); defer { self.lock.unlock() }
         switch self.status{
         case .opened,.opening:
@@ -194,7 +194,7 @@ final class Socket:@unchecked Sendable{
         }
         // not retry when reason is nil(close no reason)
         guard let reason else{
-            status = .closed(.normalClose)
+            status = .closed()
             return
         }
         // posix network unreachable
@@ -220,7 +220,7 @@ final class Socket:@unchecked Sendable{
             status = .closed(reason)
             return
         }
-        // not retry when limits
+        // not retry when limits or filter
         guard let delay = retrier.retry(when: reason) else{
             status = .closed(reason)
             return
@@ -279,7 +279,7 @@ extension Socket{
     @discardableResult
     func sendNoWait(_ packet: Packet,timeout:UInt64 = 5000)->Promise<Void> {
         guard self.status == .opened else{
-            return Promise<Void>(MQError.noConnection)
+            return Promise<Void>(MQTTError.noConnection)
         }
         do {
             MQTT.Logger.debug("SEND: \(packet)")
@@ -294,7 +294,7 @@ extension Socket{
     @discardableResult
     func sendPacket(_ packet: Packet,timeout:UInt64 = 5000)->Promise<Packet> {
         guard self.status == .opened || packet.type == .CONNECT else{
-            return Promise<Packet>(MQError.noConnection)
+            return Promise<Packet>(MQTTError.noConnection)
         }
         let task = MQTT.Task(packet)
         switch packet.type{
@@ -329,7 +329,7 @@ extension Socket{
     @discardableResult
     private func send(data:Data,timeout:UInt64)->Promise<Void>{
         guard let conn = self.conn else{
-            return .init(MQError.noConnection)
+            return .init(MQTTError.noConnection)
         }
         let promise = Promise<Void>()
         conn.send(content: data,contentContext: .default(timeout: timeout), completion: .contentProcessed({ error in
@@ -375,12 +375,12 @@ extension Socket{
                         // but there wo do noting because task will be replace by the same packetId
                         // so never happen here
                     }
-                    throw MQError.unexpectedMessage
+                    throw MQTTError.unexpectedMessage
                 }
                 .then{ msg in
                     self.onMessage?(msg)
                 }.catch { err in
-                    if case MQError.timeout = err{
+                    if case MQTTError.timeout = err{
                         //Always try again when timeout
                         return self.sendPacket(packet,timeout: self.config.publishTimeout)
                     }
@@ -392,7 +392,7 @@ extension Socket{
     
 
     func readCompleted(_ reader: Reader) {
-        self.directClose(reason: .normalClose)
+        self.directClose(reason: nil)
     }
     func reader(_ reader: Reader, didReceive error: any Error) {
         MQTT.Logger.debug("RECV: \(error)")
@@ -406,7 +406,9 @@ extension Socket{
             self.pinging?.onPong()
         case .DISCONNECT:
             let disconnect = packet as! DisconnectPacket
-            self.tryClose(reason: .disconnect(disconnect.reason,disconnect.properties))
+            self.tryClose(reason: .serverClosed(disconnect.reason,disconnect.properties))
+        case .PINGREQ:
+            self.sendNoWait(PingrespPacket())
         //----------------------------------need callback by packet type----------------------------------
         case .CONNACK:
             self.doneConnTask(with: packet)
@@ -430,7 +432,7 @@ extension Socket{
         case .UNSUBACK:// when unsubscribe packet send recv ack from broker
             self.doneActiveTask(with: packet)
         // ---------------------------at client we only send them never recv-------------------------------
-        case .CONNECT, .SUBSCRIBE, .UNSUBSCRIBE, .PINGREQ:
+        case .CONNECT, .SUBSCRIBE, .UNSUBSCRIBE:
             // MQTTError.unexpectedMessage
             MQTT.Logger.error("Unexpected MQTT Message:\(packet)")
         }

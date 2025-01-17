@@ -213,12 +213,13 @@ extension MQTT.ClientV5{
     }
     /// Close from server
     /// - Parameters:
-    ///   - reason: close reason code send to the server
+    ///   - code: The close reason code send to the server
+    ///   - properties: The close properties send to the server
     /// - Returns: `Promise` waiting on disconnect message to be sent
     ///
     @discardableResult
-    public func close(_ reason:MQTT.CloseReason = .normalClose)->Promise<Void>{
-        self.impl.close(reason)
+    public func close(_ code:ReasonCode.Disconnect = .normal ,properties:Properties)->Promise<Void>{
+        self.impl.close(code,properties: properties)
     }
     /// Re-authenticate with server
     ///
@@ -232,6 +233,6 @@ extension MQTT.ClientV5{
         properties: Properties,
         authflow: (@Sendable (AuthV5) -> Promise<AuthV5>)? = nil
     ) -> Promise<AuthV5> {
-        self.auth(properties: properties, authflow: authflow)
+        self.impl.auth(properties: properties, authflow: authflow)
     }
 }
