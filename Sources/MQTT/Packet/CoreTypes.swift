@@ -40,7 +40,7 @@ extension MQTT{
 }
 
 
-/// MQTT SUBSCRIBE packet parameters.
+/// MQTT `SUBSCRIBE` packet parameters.
 public struct Subscribe: Sendable {
     /// Topic filter to subscribe to.
     public let topicFilter: String
@@ -61,7 +61,7 @@ public struct Subscribe: Sendable {
         /// do not send retain message
         case doNotSend = 2
     }
-    /// MQTT v5 SUBSCRIBE packet parameters.
+    /// MQTT v5 `SUBSCRIBE` packet parameters.
     public struct V5: Sendable {
         /// Topic filter to subscribe to.
         public let topicFilter: String
@@ -138,7 +138,7 @@ public struct ConnackV5: Sendable {
     public let properties: Property.Connack
 }
 
-/// MQTT v5 ACK information. Returned with PUBACK, PUBREL
+/// MQTT v5 ACK information. Returned with `PUBACK`, `PUBREL`
 public struct PubackV5: Sendable ,Equatable{
     /// MQTT v5 reason code
     public let reason: ReasonCode.Puback

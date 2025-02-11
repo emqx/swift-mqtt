@@ -9,7 +9,7 @@ import Foundation
 
 @usableFromInline
 struct DataBuffer:Sendable,Equatable{
-    @usableFromInline private(set) var data:Data = Data()
+    @usableFromInline private(set) var data:Data
     @usableFromInline var nextIndex:Int = 0
     
     @inlinable
@@ -74,12 +74,10 @@ struct DataBuffer:Sendable,Equatable{
     }
     @inlinable
     mutating func readString(length:Int)->String?{
-        guard self.readableBytes >= length else {
+        guard let data = self.readData(length: length) else{
             return nil
         }
-        let idx = nextIndex
-        nextIndex += length
-        return String(data: data.subdata(in: idx..<nextIndex), encoding: .utf8)
+        return String(data: data, encoding: .utf8)
     }
     
     /// integer read and write

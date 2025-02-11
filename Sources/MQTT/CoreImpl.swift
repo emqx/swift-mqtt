@@ -8,7 +8,6 @@
 
 
 import Foundation
-import Network
 import Promise
 
 
@@ -16,8 +15,6 @@ extension MQTT{
     final class CoreImpl: @unchecked Sendable{
         let socket:Socket
         let config:Config
-        var status:Status { self.socket.status }
-        var isOpened:Bool { self.socket.status == .opened }
         private var inflight: Inflight = .init()
         private var connParams = ConnectParams()
         @Atomic
@@ -30,28 +27,6 @@ extension MQTT{
         init(_ clientId: String, endpoint:Endpoint,version:Version) {
             self.config = Config(version,clientId:clientId)
             self.socket = Socket(self.config,endpoint: endpoint)
-        }
-        /// Enabling the retry mechanism
-        ///
-        /// - Parameters:
-        ///    - policy: Retry policcy
-        ///    - limits: max retry times
-        ///    - filter: filter retry when some code and reason
-        ///
-        func usingRetrier(
-            _ policy:Retrier.Policy = .exponential(),
-            limits:UInt = 10,
-            filter:Retrier.Filter? = nil)
-        {
-            self.socket.retrier = Retrier(policy, limits: limits, filter: filter)
-        }
-        /// Enabling the network mornitor mechanism
-        ///
-        /// - Parameters:
-        ///    - enable: use monitor or not.
-        ///
-        func usingMonitor(_ enable:Bool = true){
-            self.socket.usingMonitor(enable)
         }
         /// Close from server
         /// - Parameters:
@@ -391,3 +366,4 @@ extension MQTT{
         var maxTopicAlias: UInt16 = 65535
     }
 }
+

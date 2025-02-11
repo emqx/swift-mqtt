@@ -248,7 +248,7 @@ extension Socket{
             self.pinging?.resume()
         }
     }
-    func usingMonitor(_ enable:Bool){
+    func startMonitor(_ enable:Bool){
         guard enable else{
             self.monitor?.stop()
             self.monitor = nil

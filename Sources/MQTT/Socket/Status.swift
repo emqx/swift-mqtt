@@ -132,7 +132,6 @@ extension MQTT{
             case .networkError(let error): return error.localizedDescription
             case .serverClosed(let code,_):   return "close packet code:\(code)"
             case .clientClosed(let code,_):   return "close packet code:\(code)"
-
             }
         }
     }
