@@ -15,7 +15,7 @@ public protocol MQTTDelegate:AnyObject{
 
 extension MQTT{
     open class Client{
-        let impl:CoreImpl
+        fileprivate let impl:CoreImpl
         /// readonly confg
         public var config:Config { impl.config }
         /// readonly status
@@ -108,7 +108,7 @@ extension MQTT.Client.V3{
     ///   - code: close reason code send to the server
     /// - Returns: `Promise` waiting on disconnect message to be sent
     @discardableResult
-    public func close(_ code:ReasonCode.Disconnect = .normal)->Promise<Void>{
+    public func close(_ code:ResultCode.Disconnect = .normal)->Promise<Void>{
         self.impl.close(code,properties: [])
     }
     /// Connect to MQTT server
@@ -370,7 +370,7 @@ extension MQTT.Client.V5{
         return self.impl.open(packet, authflow: authflow).then {
             .init(
                 sessionPresent: $0.sessionPresent,
-                reason: ReasonCode.ConnectV5(rawValue: $0.returnCode) ?? .unrecognisedReason,
+                reason: ResultCode.ConnectV5(rawValue: $0.returnCode) ?? .unrecognisedReason,
                 properties: $0.properties.connack()
             )
         }
@@ -382,7 +382,7 @@ extension MQTT.Client.V5{
     /// - Returns: `Promise` waiting on disconnect message to be sent
     ///
     @discardableResult
-    public func close(_ code:ReasonCode.Disconnect = .normal ,properties:Properties = [])->Promise<Void>{
+    public func close(_ code:ResultCode.Disconnect = .normal ,properties:Properties = [])->Promise<Void>{
         self.impl.close(code,properties: properties)
     }
     /// Re-authenticate with server

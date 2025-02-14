@@ -20,15 +20,15 @@ public enum MQTTError:Sendable,Equatable, Swift.Error {
     /// We received an unexpected message while connecting
     case failedToConnect
     /// We received an unsuccessful connection return value only v5
-    case connectFailV3(ReasonCode.Connect)
+    case connectFailV3(ResultCode.ConnectV3)
     /// We received an unsuccessful connection return value only v5
-    case connectFailV5(ReasonCode.ConnectV5)
+    case connectFailV5(ResultCode.ConnectV5)
     /// We received an unsuccessful return value from either a connect or publish
-    case reasonError(ReasonCode)
+    case reasonError(ResultCode)
     /// client in not connected
     case noConnection
     /// the server disconnected
-    case serverDisconnection(ReasonCode.Disconnect)
+    case serverDisconnection(ResultCode.Disconnect)
     /// the server closed the connection. If this happens during a publish you can resend
     /// the publish packet by reconnecting to server with `cleanSession` set to false.
     case serverClosedConnection

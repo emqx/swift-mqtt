@@ -118,11 +118,11 @@ extension MQTT{
         /// decode or encode packet error
         case decodeError(MQTTError.Decode)
         /// connect fail with retrun code
-        case connectFail(ReasonCode.ConnectV5)
+        case connectFail(ResultCode.ConnectV5)
         /// The client actively closes the connection
-        case clientClosed(ReasonCode.Disconnect,Properties)
+        case clientClosed(ResultCode.Disconnect,Properties)
         /// The server actively closes the connection and receive disconnect packet 
-        case serverClosed(ReasonCode.Disconnect,Properties)
+        case serverClosed(ResultCode.Disconnect,Properties)
         public var description: String{
             switch self{
             case .unsatisfied: return "network unsatisfied"

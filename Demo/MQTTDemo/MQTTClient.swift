@@ -24,7 +24,7 @@ class MQTTClient:MQTT.Client.V5{
         /// start auto reconnecting
         self.startRetrier{reason in
             switch reason{
-            case .serverClosed(let code, let props):
+            case .serverClosed(let code, _):
                 switch code{
                 case .serverBusy,.connectionRateExceeded:// don't retry when server is busy
                     return true

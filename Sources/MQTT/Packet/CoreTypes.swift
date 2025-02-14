@@ -116,11 +116,11 @@ public struct Suback: Sendable {
     /// Contains data returned in subscribe/unsubscribe ack packets
     public struct V5: Sendable {
         /// MQTT v5 subscription reason code
-        public let reasons: [ReasonCode.Suback]
+        public let reasons: [ResultCode.Suback]
         /// MQTT v5 properties
         public let properties: Properties
 
-        init(reasons: [ReasonCode.Suback], properties: Properties = .init()) {
+        init(reasons: [ResultCode.Suback], properties: Properties = .init()) {
             self.reasons = reasons
             self.properties = properties
         }
@@ -133,7 +133,7 @@ public struct ConnackV5: Sendable {
     /// is using session state from previous session
     public let sessionPresent: Bool
     /// connect reason code
-    public let reason: ReasonCode.ConnectV5
+    public let reason: ResultCode.ConnectV5
     /// properties
     public let properties: Property.Connack
 }
@@ -141,11 +141,11 @@ public struct ConnackV5: Sendable {
 /// MQTT v5 ACK information. Returned with `PUBACK`, `PUBREL`
 public struct PubackV5: Sendable ,Equatable{
     /// MQTT v5 reason code
-    public let reason: ReasonCode.Puback
+    public let reason: ResultCode.Puback
     /// MQTT v5 properties
     public let properties: Property.ACK
 
-    init(reason: ReasonCode.Puback = .success, properties: Properties = .init()) {
+    init(reason: ResultCode.Puback = .success, properties: Properties = .init()) {
         self.reason = reason
         self.properties = properties.ack()
     }
@@ -158,11 +158,11 @@ public struct PubackV5: Sendable ,Equatable{
 /// authentication
 public struct AuthV5: Sendable {
     /// MQTT v5 authentication reason code
-    public let reason: ReasonCode.Auth
+    public let reason: ResultCode.Auth
     /// MQTT v5 properties
     public let properties: Property.Auth
 
-    init(reason: ReasonCode.Auth, properties: Properties) {
+    init(reason: ResultCode.Auth, properties: Properties) {
         self.reason = reason
         self.properties = properties.auth()
     }

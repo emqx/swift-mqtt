@@ -133,16 +133,16 @@ import Foundation
 /// a failure. These are returned by CONNACK, PUBACK, PUBREC, PUBREL, PUBCOMP, DISCONNECT and
 /// AUTH packets
 ///
-public enum ReasonCode:Sendable,Equatable{
+public enum ResultCode:Sendable,Equatable{
     case auth(Auth)
-    case connect(Connect)
+    case connect(ConnectV3)
     case connectv5(ConnectV5)
     case disconnect(Disconnect)
     case puback(Puback)
     case suback(Suback)
     case unsuback(Unsuback)
 }
-extension ReasonCode{
+extension ResultCode{
     public enum Auth: UInt8,Sendable,Equatable {
         case success = 0x00
         /// Continue the authentication with another step
@@ -153,7 +153,7 @@ extension ReasonCode{
         case unrecognisedReason = 0xFF
     }
     /// Value returned in connection error in v3
-    public enum Connect: UInt8, Sendable,Equatable {
+    public enum ConnectV3: UInt8, Sendable,Equatable {
         /// connection was accepted
         case accepted = 0
         /// The Server does not support the version of the MQTT protocol requested by the Client.

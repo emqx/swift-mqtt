@@ -406,7 +406,7 @@ extension Socket{
             self.pinging?.onPong()
         case .DISCONNECT:
             let disconnect = packet as! DisconnectPacket
-            self.tryClose(reason: .serverClosed(disconnect.reason,disconnect.properties))
+            self.tryClose(reason: .serverClosed(disconnect.result,disconnect.properties))
         case .PINGREQ:
             self.sendNoWait(PingrespPacket())
         //----------------------------------need callback by packet type----------------------------------

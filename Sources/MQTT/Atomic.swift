@@ -40,7 +40,7 @@ public typealias Lock = NSLock
 class Atomic<T> : @unchecked Sendable{
     private var value: T
     private let lock: Lock = Lock()
-    public var projectedValue: Atomic<T> { self }
+    var projectedValue: Atomic<T> { self }
     init(wrappedValue: T) {
         self.value = wrappedValue
     }

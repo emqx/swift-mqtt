@@ -32,13 +32,13 @@ extension MQTT{
         /// - Parameters:
         ///   - code: close reason code send to the server
         /// - Returns: `Promise` waiting on disconnect message to be sent
-        func close(_ code:ReasonCode.Disconnect = .normal,properties:Properties)->Promise<Void>{
+        func close(_ code:ResultCode.Disconnect = .normal,properties:Properties)->Promise<Void>{
             var packet:DisconnectPacket
             switch config.version {
             case .v5_0:
-                packet = .init(reason: code,properties: properties)
+                packet = .init(result: code,properties: properties)
             case .v3_1_1:
-                packet = .init(reason: code)
+                packet = .init(result: code)
             }
             return self.socket.sendNoWait(packet).map { _ in
                 self.socket.directClose(reason: .clientClosed(code, properties))
@@ -138,12 +138,12 @@ extension MQTT.CoreImpl {
         switch self.config.version {
         case .v3_1_1:
             if connack.returnCode != 0 {
-                let returnCode = ReasonCode.Connect(rawValue: connack.returnCode) ?? .unrecognisedReason
+                let returnCode = ResultCode.ConnectV3(rawValue: connack.returnCode) ?? .unrecognisedReason
                 throw MQTTError.connectFailV3(returnCode)
             }
         case .v5_0:
             if connack.returnCode > 0x7F {
-                let returnCode = ReasonCode.ConnectV5(rawValue: connack.returnCode) ?? .unrecognisedReason
+                let returnCode = ResultCode.ConnectV5(rawValue: connack.returnCode) ?? .unrecognisedReason
                 throw MQTTError.connectFailV5(returnCode)
             }
         }
