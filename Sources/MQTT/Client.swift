@@ -4,7 +4,6 @@
 //
 //  Created by supertext on 2025/1/15.
 //
-import Promise
 import Foundation
 
 public protocol MQTTDelegate:AnyObject{

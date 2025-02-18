@@ -8,8 +8,6 @@
 
 
 import Foundation
-import Promise
-
 
 extension MQTT{
     final class CoreImpl: @unchecked Sendable{
@@ -17,8 +15,7 @@ extension MQTT{
         let config:Config
         private var inflight: Inflight = .init()
         private var connParams = ConnectParams()
-        @Atomic
-        private var packetId: UInt16 = 0
+        @Safely private var packetId: UInt16 = 0
         /// Initial v3 client object
         ///
         /// - Parameters:

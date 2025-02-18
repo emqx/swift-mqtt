@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import Promise
+@_exported import Promise
 
 ///
 /// Global MQTT namespace
@@ -134,8 +134,7 @@ extension MQTT{
 extension MQTT{
     /// Array of inflight packets. Used to resend packets when reconnecting to server
     struct Inflight : Sendable{
-        @Atomic
-        private(set) var packets: [Packet] = []
+        @Safely private(set) var packets: [Packet] = []
         /// add packet
         func add(packet: Packet) {
             self.$packets.write { pkgs in
@@ -150,7 +149,7 @@ extension MQTT{
             }
         }
         /// remove all packets
-        func clear() {
+        mutating func clear() {
             self.$packets.write { pkgs in
                 pkgs = []
             }

@@ -7,7 +7,6 @@
 
 import Foundation
 import Network
-import Promise
 
 final class Socket:@unchecked Sendable{
     internal let queue:DispatchQueue
@@ -19,7 +18,7 @@ final class Socket:@unchecked Sendable{
     internal let endpoint:MQTT.Endpoint
     internal let config:MQTT.Config
 
-    private let lock = Lock()
+    private let safe = Safely()
     private var pinging:MQTT.Pinging?
     private var monitor:MQTT.Monitor?
     private var activeTasks:[UInt16:MQTT.Task] = [:] // active workflow tasks
@@ -82,7 +81,7 @@ final class Socket:@unchecked Sendable{
         }
     }
     func open(packet:ConnectPacket)->Promise<Packet>{
-        self.lock.lock(); defer { self.lock.unlock() }
+        self.safe.lock(); defer { self.safe.unlock() }
         switch self.status{
         case .opened:
             return .init(MQTTError.alreadyConnected)
@@ -102,7 +101,7 @@ final class Socket:@unchecked Sendable{
     
     
     private func reopen(){
-        self.lock.lock(); defer { self.lock.unlock() }
+        self.safe.lock(); defer { self.safe.unlock() }
         switch self.status{
         case .opened:
             return
@@ -172,7 +171,7 @@ final class Socket:@unchecked Sendable{
     }
     /// Close network connection diirectly
     func directClose(reason:MQTT.CloseReason?){
-        self.lock.lock(); defer { self.lock.unlock() }
+        self.safe.lock(); defer { self.safe.unlock() }
         switch self.status{
         case .opened,.opening:
             if case .ready = self.conn?.state{
