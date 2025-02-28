@@ -6,19 +6,58 @@
 //
 import Foundation
 
-public protocol MQTTDelegate:AnyObject{
+public protocol MQTTDelegate:AnyObject,Sendable{
     func mqtt(_ mqtt: MQTT.Client, didUpdate status:MQTT.Status, prev :MQTT.Status)
     func mqtt(_ mqtt: MQTT.Client, didReceive message:MQTT.Message)
     func mqtt(_ mqtt: MQTT.Client, didReceive error:Error)
 }
-extension MQTT{
-    class Observer{
-        var onStatus:(((new:Status,old:Status))->Void)?
-        var onMessage:((Message)->Void)?
-        var onError:((Error)->Void)?
+public extension Notification{
+    /// Parse mqtt message from `Notification` conveniently
+    func mqttMesaage()->(client:MQTT.Client,message:MQTT.Message)?{
+        guard let client = self.object as? MQTT.Client else{
+            return nil
+        }
+        guard let message = self.userInfo?["message"] as? MQTT.Message else{
+            return nil
+        }
+        return (client,message)
     }
-    open class Client{
+    /// Parse mqtt status from `Notification` conveniently
+    func mqttStatus()->(client:MQTT.Client,new:MQTT.Status,old:MQTT.Status)?{
+        guard let client = self.object as? MQTT.Client else{
+            return nil
+        }
+        guard let new = self.userInfo?["new"] as? MQTT.Status else{
+            return nil
+        }
+        guard let old = self.userInfo?["old"] as? MQTT.Status else{
+            return nil
+        }
+        return (client,new,old)
+    }
+    /// Parse mqtt error from `Notification` conveniently
+    func mqttError()->(client:MQTT.Client,error:Error)?{
+        guard let client = self.object as? MQTT.Client else{
+            return nil
+        }
+        guard let error = self.userInfo?["error"] as? Error else{
+            return nil
+        }
+        return (client,error)
+    }
+}
+extension MQTT{
+    public enum ObserverType:String{
+        case error = "swift.mqtt.received.error"
+        case status = "swift.mqtt.status.changed"
+        case message = "swift.mqtt.received.message"
+        var notifyName:Notification.Name{ .init(rawValue: rawValue) }
+    }
+    open class Client: @unchecked Sendable{
+        private let notify = NotificationCenter()
         fileprivate let impl:CoreImpl
+        /// The delegate and observers callback queue 
+        public var delegateQueue:DispatchQueue = .main
         /// readonly confg
         public var config:Config { impl.config }
         /// readonly status
@@ -32,26 +71,38 @@ extension MQTT{
         /// mqtt delegate
         public weak var delegate:MQTTDelegate?{
             didSet{
-                if let delegate {
-                    self.impl.socket.onMessage = {[weak self] msg in
-                        if let self{
-                            delegate.mqtt(self, didReceive: msg)
-                        }
-                    }
-                    self.impl.socket.onStatus = {[weak self]  new,old in
-                        if let self{
-                            delegate.mqtt(self, didUpdate: new, prev: old)
-                        }
-                    }
-                    self.impl.socket.onError = {[weak self] err in
-                        if let self{
-                            delegate.mqtt(self, didReceive: err)
-                        }
-                    }
-                }else{
+                guard let delegate else{
                     self.impl.socket.onMessage = nil
                     self.impl.socket.onStatus = nil
                     self.impl.socket.onError = nil
+                    return
+                }
+                self.impl.socket.onMessage = {[weak self] msg in
+                    if let self{
+                        self.delegateQueue.async {
+                            delegate.mqtt(self, didReceive: msg)
+                            let info = ["message":msg]
+                            self.notify.post(name: ObserverType.message.notifyName, object: self, userInfo: info)
+                        }
+                    }
+                }
+                self.impl.socket.onStatus = {[weak self]  new,old in
+                    if let self{
+                        self.delegateQueue.async {
+                            delegate.mqtt(self, didUpdate: new, prev: old)
+                            let info:[String:Status] = ["old":old,"new":new]
+                            self.notify.post(name: ObserverType.status.notifyName, object: self, userInfo: info)
+                        }
+                    }
+                }
+                self.impl.socket.onError = {[weak self] err in
+                    if let self{
+                        self.delegateQueue.async {
+                            delegate.mqtt(self, didReceive: err)
+                            let info:[String:Error] = ["error":err]
+                            self.notify.post(name: ObserverType.error.notifyName, object: self, userInfo:info)
+                        }
+                    }
                 }
             }
         }
@@ -89,11 +140,33 @@ extension MQTT{
         public func stopMonitor(){
             self.impl.socket.startMonitor(false)
         }
+        /// Add observer for some type
+        /// - Parameters:
+        ///    - target:the observer target
+        ///    - type: observer type
+        ///    - selector: callback selector
+        /// - Important:Note that this operation will strongly references `target`
+        public func addObserver(_ target:AnyObject,of type:ObserverType,selector:Selector){
+            self.notify.addObserver(target, selector: selector, name: type.notifyName, object: self)
+        }
+        /// Remove some observer of target
+        /// - Important:References must be removed when not in use
+        public func removeObserver(_ target:Any,of type:ObserverType){
+            self.notify.removeObserver(target, name: type.notifyName, object: self)
+        }
+        /// Remove all observer of target
+        /// - Important:References must be removed when not in use
+        public func removeObserver(_ target:Any){
+            let all:[ObserverType] = [.error,.status,.message]
+            all.forEach {
+                self.notify.removeObserver(target, name: $0.notifyName, object: self)
+            }
+        }
     }
 }
 
 extension MQTT.Client{
-    open class V3:MQTT.Client{
+    open class V3:MQTT.Client, @unchecked Sendable{
         /// Initial v5 client object
         ///
         /// - Parameters:
@@ -224,7 +297,7 @@ extension MQTT.Client.V3{
 
 
 extension MQTT.Client{
-    open class V5:MQTT.Client{
+    open class V5:MQTT.Client, @unchecked Sendable{
         /// Initial v5 client object
         ///
         /// - Parameters:

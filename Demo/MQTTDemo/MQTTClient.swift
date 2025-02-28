@@ -7,11 +7,32 @@
 
 import MQTT
 import Foundation
-import Photos
 
 let client = MQTTClient()
 
-class MQTTClient:MQTT.Client.V5{
+class Observer{
+    @objc func statusChanged(_ notify:Notification){
+        guard let info = notify.mqttStatus() else{
+            return
+        }
+        print("from:",info.old," to:",info.old)
+    }
+    @objc func recivedMessage(_ notify:Notification){
+        guard let info = notify.mqttMesaage() else{
+            return
+        }
+        let str = String(data: info.message.payload, encoding: .utf8) ?? ""
+        print(str)
+    }
+    @objc func recivedError(_ notify:Notification){
+        guard let info = notify.mqttError() else{
+            return
+        }
+        print(info.error)
+    }
+}
+class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
+    let observer = Observer()
     init() {
         let clientID = UUID().uuidString
         super.init(clientID, endpoint: .quic(host: "172.16.2.7",tls: .trustAll()))
@@ -20,7 +41,7 @@ class MQTTClient:MQTT.Client.V5{
         self.config.username = "test"
         self.config.password = "test"
         self.config.pingEnabled = true
-        self.delegate = self
+        
         /// start network monitor
         self.startMonitor()
         /// start auto reconnecting
@@ -37,18 +58,25 @@ class MQTTClient:MQTT.Client.V5{
                 return false
             }
         }
+        /// eg
+        /// set simple delegate
+        self.delegate = self
+        /// eg.
+        /// add multiple observer.
+        self.addObserver(observer, of: .status, selector: #selector(Observer.statusChanged(_:)))
+        self.addObserver(observer, of: .message, selector: #selector(Observer.recivedMessage(_:)))
+        self.addObserver(observer, of: .error, selector: #selector(Observer.recivedError(_:)))
     }
-    var onStatus:((MQTT.Status)->Void)?
-    var onMessage:((MQTT.Message)->Void)?
+    
 }
 extension MQTTClient:MQTTDelegate{
     func mqtt(_ mqtt: MQTT.Client, didUpdate status: MQTT.Status, prev: MQTT.Status) {
-        self.onStatus?(status)
+        print("status:",status)
     }
     func mqtt(_ mqtt: MQTT.Client, didReceive error: any Error) {
         print("Error:",error)
     }
     func mqtt(_ mqtt: MQTT.Client, didReceive message: MQTT.Message) {
-        self.onMessage?(message)
+        print("message:",message)
     }
 }

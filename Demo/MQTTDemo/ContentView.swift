@@ -11,18 +11,36 @@ import MQTT
 class State:ObservableObject{
     @Published var title:String = "closed"
     @Published var messages:[String] = ["RECV Message:"]
+    deinit{
+        client.removeObserver(self)
+    }
     init() {
-        client.onStatus = { status in
-            DispatchQueue.main.async {
-                self.title = status.description
-            }
+        client.addObserver(self, of: .status, selector: #selector(statusChanged(_:)))
+        client.addObserver(self, of: .message, selector: #selector(recivedMessage(_:)))
+//        client.onStatus = { status in
+//            DispatchQueue.main.async {
+//                self.title = status.description
+//            }
+//        }
+//        client.onMessage = {message in
+//            DispatchQueue.main.async {
+//                let str = String(data: message.payload, encoding: .utf8) ?? ""
+//                self.messages.append("\(self.messages.count): "+str)
+//            }
+//        }
+    }
+    @objc func statusChanged(_ notify:Notification){
+        guard let info = notify.mqttStatus() else{
+            return
         }
-        client.onMessage = {message in
-            DispatchQueue.main.async {
-                let str = String(data: message.payload, encoding: .utf8) ?? ""
-                self.messages.append("\(self.messages.count): "+str)
-            }
+        self.title = info.new.description
+    }
+    @objc func recivedMessage(_ notify:Notification){
+        guard let info = notify.mqttMesaage() else{
+            return
         }
+        let str = String(data: info.message.payload, encoding: .utf8) ?? ""
+        self.messages.append("\(self.messages.count): "+str)
     }
 }
 struct ContentView: View {
