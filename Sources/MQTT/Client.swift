@@ -11,8 +11,12 @@ public protocol MQTTDelegate:AnyObject{
     func mqtt(_ mqtt: MQTT.Client, didReceive message:MQTT.Message)
     func mqtt(_ mqtt: MQTT.Client, didReceive error:Error)
 }
-
 extension MQTT{
+    class Observer{
+        var onStatus:(((new:Status,old:Status))->Void)?
+        var onMessage:((Message)->Void)?
+        var onError:((Error)->Void)?
+    }
     open class Client{
         fileprivate let impl:CoreImpl
         /// readonly confg

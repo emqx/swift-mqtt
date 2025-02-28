@@ -89,6 +89,17 @@ struct ConnectPacket: Packet {
     /// will published when connected
     let will: MQTT.Message?
 
+    func copyNotClean()->ConnectPacket{
+        ConnectPacket(
+            cleanSession: false,
+            keepAliveSeconds: self.keepAliveSeconds,
+            clientId: self.clientId,
+            username: self.username,
+            password: self.password,
+            properties: self.properties,
+            will: self.will
+        )
+    }
     /// write connect packet to bytebuffer
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
         writeFixedHeader(packetType: .CONNECT, size: self.packetSize(version: version), to: &byteBuffer)

@@ -102,13 +102,15 @@ final class Socket:@unchecked Sendable{
     
     private func reopen(){
         self.safe.lock(); defer { self.safe.unlock() }
-        switch self.status{
-        case .opened:
+        if status == .opening || status == .opened{
             return
-        case .opening:
+        }
+        guard let packet else{
             return
-        default:
-            break
+        }
+        // not clean session when auto reconnection
+        if packet.cleanSession{
+            self.packet = packet.copyNotClean()
         }
         self.status = .opening
         self.resume()
@@ -223,6 +225,15 @@ final class Socket:@unchecked Sendable{
         guard let delay = retrier.retry(when: reason) else{
             status = .closed(reason)
             return
+        }
+        // not retry when no prev conn packet
+        guard let packet else{
+            status = .closed(reason)
+            return
+        }
+        // not clean session when auto reconnection
+        if packet.cleanSession{
+            self.packet = packet.copyNotClean()
         }
         self.retrying = true
         self.status = .opening
