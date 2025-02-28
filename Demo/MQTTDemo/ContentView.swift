@@ -17,17 +17,6 @@ class State:ObservableObject{
     init() {
         client.addObserver(self, of: .status, selector: #selector(statusChanged(_:)))
         client.addObserver(self, of: .message, selector: #selector(recivedMessage(_:)))
-//        client.onStatus = { status in
-//            DispatchQueue.main.async {
-//                self.title = status.description
-//            }
-//        }
-//        client.onMessage = {message in
-//            DispatchQueue.main.async {
-//                let str = String(data: message.payload, encoding: .utf8) ?? ""
-//                self.messages.append("\(self.messages.count): "+str)
-//            }
-//        }
     }
     @objc func statusChanged(_ notify:Notification){
         guard let info = notify.mqttStatus() else{
@@ -55,19 +44,19 @@ struct ContentView: View {
                     client.close()
                 }
                 Button("SUBSCRIBE") {
-                    client.subscribe(to:"g/u/p/111")
+                    client.subscribe(to:"topic")
                 }
                 Button("UNSUBSCRIBE") {
-                    client.unsubscribe(from:"g/u/p/111")
+                    client.unsubscribe(from:"topic")
                 }
                 Button("SEND MESSAGE Qos0") {
-                    client.publish(to:"g/u/p/111", payload: "hello mqtt qos0",qos: .atMostOnce)
+                    client.publish(to:"topic", payload: "hello mqtt qos0",qos: .atMostOnce)
                 }
                 Button("SEND MESSAGE Qos1") {
-                    client.publish(to:"g/u/p/111", payload: "hello mqtt qos1",qos: .atLeastOnce)
+                    client.publish(to:"topic", payload: "hello mqtt qos1",qos: .atLeastOnce)
                 }
                 Button("SEND MESSAGE Qos2") {
-                    client.publish(to:"g/u/p/111", payload: "hello mqtt qos2",qos: .exactlyOnce)
+                    client.publish(to:"topic", payload: "hello mqtt qos2",qos: .exactlyOnce)
                 }
                 ScrollViewReader { proxy in
                     ScrollView {
