@@ -100,6 +100,12 @@ extension MQTT.CoreImpl {
             default:
                 throw MQTTError.unexpectedMessage
             }
+        }.then { pkg in
+            self.socket.status = .opened
+            return pkg
+        }.catch { error in
+            //TODO Correct expression error
+            self.socket.status = .closed(nil)
         }
     }
 

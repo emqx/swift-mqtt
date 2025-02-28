@@ -15,7 +15,7 @@ class Observer{
         guard let info = notify.mqttStatus() else{
             return
         }
-        print("from:",info.old," to:",info.old)
+        print("from:",info.old," to:",info.new)
     }
     @objc func recivedMessage(_ notify:Notification){
         guard let info = notify.mqttMesaage() else{

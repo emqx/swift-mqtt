@@ -65,14 +65,14 @@ public struct TLSOptions:Sendable{
             sec_protocol_options_set_verify_block(opt_t, { _, _, complete in complete(true) }, queue)
         case .trustRoots(let trusts):
             sec_protocol_options_set_verify_block(opt_t,
-                { _, sec_trust, complette in
+                { _, sec_trust, complete in
                     let trust = sec_trust_copy_ref(sec_trust).takeRetainedValue()
                     SecTrustSetAnchorCertificates(trust, trusts as CFArray)
                     SecTrustEvaluateAsyncWithError(trust, self.queue) { _, result, error in
                         if let error {
                             MQTT.Logger.error("Trust failed: \(error.localizedDescription)")
                         }
-                        complette(result)
+                        complete(result)
                     }
                 },
                 queue
@@ -98,8 +98,8 @@ extension TLSOptions{
     public enum Verify:@unchecked Sendable{
         case trustAll
         case trustRoots([SecCertificate])
-        public static func trust(der file:String)throws -> Verify{
-            let data = try Data(contentsOf: URL(fileURLWithPath: file))
+        public static func trust(der filePath:String)throws -> Verify{
+            let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
             if let cert = SecCertificateCreateWithData(nil, data as CFData) {
                 return .trustRoots([cert])
             }

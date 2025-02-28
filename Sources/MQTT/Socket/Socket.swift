@@ -93,6 +93,7 @@ final class Socket:@unchecked Sendable{
         self.packet = packet
         self.status = .opening
         self.resume()
+        self.doReady()
         let promise = Promise<Packet>()
         self.openTask = promise
         return promise
@@ -127,8 +128,9 @@ final class Socket:@unchecked Sendable{
             self.tryClose(reason: .networkError(error))
             self.onError?(error)
         case .ready:
+            break
             // Transitioning to ready means the connection was succeeded. Hooray!
-            self.doReady()
+//            self.doReady()
         case .preparing:
             // This just means connections are being actively established. We have no specific action
             // here.
@@ -162,14 +164,7 @@ final class Socket:@unchecked Sendable{
         self.sendPacket(packet).then { packet in
             self.openTask?.done(packet)
             self.openTask = nil
-            guard let connack = packet as? ConnackPacket else {
-                return
-            }
-            if connack.returnCode == 0{
-                self.status = .opened
-            }
         }
-        self.reader?.start()
     }
     /// Close network connection diirectly
     func directClose(reason:MQTT.CloseReason?){
@@ -188,7 +183,7 @@ final class Socket:@unchecked Sendable{
     }
     /// Internal method run in delegate queue
     /// try close when no need retry
-    private func tryClose(reason:MQTT.CloseReason?){
+    func tryClose(reason:MQTT.CloseReason?){
         MQTT.Logger.debug("Try close reason:\(reason.debugDescription)")
         if self.retrying{
             return
@@ -244,11 +239,13 @@ final class Socket:@unchecked Sendable{
     }
     private func resume(){
         let params = endpoint.params(config: config)
+        params.1.allowFastOpen = true // allow fast open
         let conn = NWConnection(to: params.0, using: params.1)
         conn.stateUpdateHandler = self.handle(state:)
         conn.start(queue: queue)
         self.conn = conn
         self.reader = Reader(self,conn: conn)
+        self.reader?.start()
     }
 }
 extension Socket{
