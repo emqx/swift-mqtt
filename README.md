@@ -1,5 +1,5 @@
 # swift-mqtt
-- A MQTT Client over TCP and QUIC protocol
+- An MQTT Client over TCP and QUIC protocol
 - QUIC protocol mark with `@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)`
 ### Usage
 ```swift
