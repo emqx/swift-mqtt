@@ -36,6 +36,9 @@ extension MQTT{
             self.payload = payload
             self.properties = properties
         }
+        func duplicate()->Message{
+            .init(qos: qos, dup: true, topic: topic, retain: retain, payload: payload, properties: properties)
+        }
     }
 }
 
@@ -116,12 +119,12 @@ public struct Suback: Sendable {
     /// Contains data returned in subscribe/unsubscribe ack packets
     public struct V5: Sendable {
         /// MQTT v5 subscription reason code
-        public let reasons: [ResultCode.Suback]
+        public let codes: [ResultCode.Suback]
         /// MQTT v5 properties
         public let properties: Properties
 
-        init(reasons: [ResultCode.Suback], properties: Properties = .init()) {
-            self.reasons = reasons
+        init(codes: [ResultCode.Suback], properties: Properties = .init()) {
+            self.codes = codes
             self.properties = properties
         }
     }
@@ -130,23 +133,22 @@ public struct Suback: Sendable {
 
 /// MQTT v5 Connack
 public struct ConnackV5: Sendable {
-    /// is using session state from previous session
-    public let sessionPresent: Bool
     /// connect reason code
-    public let reason: ResultCode.ConnectV5
+    public let code: ResultCode.ConnectV5
     /// properties
     public let properties: Property.Connack
+    /// is using session state from previous session
+    public let sessionPresent: Bool
 }
 
 /// MQTT v5 ACK information. Returned with `PUBACK`, `PUBREL`
 public struct PubackV5: Sendable ,Equatable{
     /// MQTT v5 reason code
-    public let reason: ResultCode.Puback
+    public let code: ResultCode.Puback
     /// MQTT v5 properties
     public let properties: Property.ACK
-
-    init(reason: ResultCode.Puback = .success, properties: Properties = .init()) {
-        self.reason = reason
+    init(code: ResultCode.Puback = .success, properties: Properties = .init()) {
+        self.code = code
         self.properties = properties.ack()
     }
 }
@@ -158,12 +160,12 @@ public struct PubackV5: Sendable ,Equatable{
 /// authentication
 public struct AuthV5: Sendable {
     /// MQTT v5 authentication reason code
-    public let reason: ResultCode.Auth
+    public let code: ResultCode.Auth
     /// MQTT v5 properties
     public let properties: Property.Auth
 
-    init(reason: ResultCode.Auth, properties: Properties) {
-        self.reason = reason
+    init(code: ResultCode.Auth, properties: Properties) {
+        self.code = code
         self.properties = properties.auth()
     }
 }

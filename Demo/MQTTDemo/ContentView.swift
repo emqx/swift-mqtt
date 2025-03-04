@@ -38,25 +38,39 @@ struct ContentView: View {
         NavigationView {
             VStack(alignment: .leading, spacing: 25) {
                 Button("OPEN MQTT") {
-                    client.open()
+                    client.open().catch { err in
+                        print(err)
+                    }
                 }
                 Button("CLOSE MQTT") {
-                    client.close()
+                    client.close().catch { err in
+                        print(err)
+                    }
                 }
                 Button("SUBSCRIBE") {
-                    client.subscribe(to:"topic")
+                    client.subscribe(to:"topic",qos: .exactlyOnce).catch { err in
+                        print(err)
+                    }
                 }
                 Button("UNSUBSCRIBE") {
-                    client.unsubscribe(from:"topic")
+                    client.unsubscribe(from:"topic").catch { err in
+                        print(err)
+                    }
                 }
                 Button("SEND MESSAGE Qos0") {
-                    client.publish(to:"topic", payload: "hello mqtt qos0",qos: .atMostOnce)
+                    client.publish(to:"topic", payload: "hello mqtt qos0",qos: .atMostOnce).catch { err in
+                        print(err)
+                    }
                 }
                 Button("SEND MESSAGE Qos1") {
-                    client.publish(to:"topic", payload: "hello mqtt qos1",qos: .atLeastOnce)
+                    client.publish(to:"topic", payload: "hello mqtt qos1",qos: .atLeastOnce).catch { err in
+                        print(err)
+                    }
                 }
                 Button("SEND MESSAGE Qos2") {
-                    client.publish(to:"topic", payload: "hello mqtt qos2",qos: .exactlyOnce)
+                    client.publish(to:"topic", payload: "hello mqtt qos2",qos: .exactlyOnce).catch { err in
+                        print(err)
+                    }
                 }
                 ScrollViewReader { proxy in
                     ScrollView {

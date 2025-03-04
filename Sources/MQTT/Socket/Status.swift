@@ -93,7 +93,7 @@ import Network
 extension MQTT{
     
     /// state machine
-    public enum Status:Sendable,Equatable,CustomStringConvertible{
+    public enum Status:Sendable,Hashable,CustomStringConvertible{
         case opened
         case opening
         case closing
@@ -108,32 +108,40 @@ extension MQTT{
         }
     }
     ///  close reason
-    public enum CloseReason:Sendable,Equatable,CustomStringConvertible{
+    public enum CloseReason:Sendable,Hashable,CustomStringConvertible{
+        public static func == (lhs: MQTT.CloseReason, rhs: MQTT.CloseReason) -> Bool {
+            lhs.hashValue == rhs.hashValue
+        }
         /// close when ping timeout
         case pingTimeout
         /// auto close by network monitor when network unsatisfied
         case unsatisfied
+        /// some special error
+        case normalError(Error)
         /// close when network error.
         case networkError(NWError)
         /// decode or encode packet error
-        case decodeError(MQTTError.Decode)
+//        case decodeError(MQTTError.Decode)
         /// connect fail with retrun code
-        case connectFail(ResultCode.ConnectV5)
+//        case connectFail(ResultCode.ConnectV5)
         /// The client actively closes the connection
-        case clientClosed(ResultCode.Disconnect,Properties)
+//        case clientClosed(ResultCode.Disconnect,Properties)
         /// The server actively closes the connection and receive disconnect packet 
-        case serverClosed(ResultCode.Disconnect,Properties)
+//        case serverClosed(ResultCode.Disconnect,Properties)
         public var description: String{
             switch self{
             case .unsatisfied: return "network unsatisfied"
             case .pingTimeout: return "ping timeout"
-            case .decodeError(let error): return "\(error)"
-            case .connectFail(let code):  return "connect error code:\(code)"
-            case .networkError(let error): return error.localizedDescription
-            case .serverClosed(let code,_):   return "close packet code:\(code)"
-            case .clientClosed(let code,_):   return "close packet code:\(code)"
+//            case .decodeError(let error): return "\(error)"
+//            case .connectFail(let code):  return "connect error code:\(code)"
+            case .networkError(let error): return "network error \(error)"
+            case .normalError(let error): return "normal error \(error)"
+//            case .serverClosed(let code,_):return "server closed code:\(code)"
+//            case .clientClosed(let code,_):return "client closed code:\(code)"
             }
         }
+        public func hash(into hasher: inout Hasher) {
+            self.description.hash(into: &hasher)
+        }
     }
-    
 }

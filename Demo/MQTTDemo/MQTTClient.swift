@@ -8,6 +8,34 @@
 import MQTT
 import Foundation
 
+enum Logger:Sendable{
+    nonisolated(unsafe) public static var level:Level = .error
+    private static func log(_ level: Level, message: String) {
+        guard level.rawValue >= self.level.rawValue else { return }
+        print("APP(\(level)): \(message)")
+    }
+    static func debug(_ message: String) {
+        log(.debug, message: message)
+    }
+    static func info(_ message: String) {
+        log(.info, message: message)
+    }
+    static func warning(_ message: String) {
+        log(.warning, message: message)
+    }
+    static func error(_ message: String) {
+        log(.error, message: message)
+    }
+    static func error(_ error: Error?){
+        log(.error, message: error.debugDescription)
+    }
+}
+extension Logger{
+    enum Level: Int, Sendable {
+        case debug = 0, info, warning, error, off
+    }
+}
+
 let client = MQTTClient()
 
 class Observer{
@@ -15,20 +43,20 @@ class Observer{
         guard let info = notify.mqttStatus() else{
             return
         }
-        print("from:",info.old," to:",info.old)
+        Logger.info("observed: status: \(info.old)--> \(info.new)")
     }
     @objc func recivedMessage(_ notify:Notification){
         guard let info = notify.mqttMesaage() else{
             return
         }
         let str = String(data: info.message.payload, encoding: .utf8) ?? ""
-        print(str)
+        Logger.info("observed: message: \(str)")
     }
     @objc func recivedError(_ notify:Notification){
         guard let info = notify.mqttError() else{
             return
         }
-        print(info.error)
+        Logger.info("observed: error: \(info.error)")
     }
 }
 class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
@@ -46,17 +74,14 @@ class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
         self.startMonitor()
         /// start auto reconnecting
         self.startRetrier{reason in
-            switch reason{
-            case .serverClosed(let code, _):
-                switch code{
-                case .serverBusy,.connectionRateExceeded:// don't retry when server is busy
-                    return true
-                default:
-                    return false
-                }
-            default:
+            guard case .normalError(let error) = reason,
+                    case MQTTError.serverClosed(let code) = error else{
                 return false
             }
+            if code == .serverBusy || code == .connectionRateExceeded{
+                return true
+            }
+            return false
         }
         /// eg
         /// set simple delegate
@@ -71,12 +96,14 @@ class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
 }
 extension MQTTClient:MQTTDelegate{
     func mqtt(_ mqtt: MQTT.Client, didUpdate status: MQTT.Status, prev: MQTT.Status) {
-        print("status:",status)
+        Logger.info("delegate: status \(prev)--> \(status)")
+
     }
     func mqtt(_ mqtt: MQTT.Client, didReceive error: any Error) {
-        print("Error:",error)
+        Logger.info("delegate: error \(error)")
     }
     func mqtt(_ mqtt: MQTT.Client, didReceive message: MQTT.Message) {
-        print("message:",message)
+        let str = String(data: message.payload, encoding: .utf8) ?? ""
+        Logger.info("delegate: message: \(str)")
     }
 }

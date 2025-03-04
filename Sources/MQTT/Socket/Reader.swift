@@ -13,9 +13,9 @@ class Reader:@unchecked Sendable{
     private var header:UInt8 = 0
     private var length:Int = 0
     private var multiply = 1
-    private var version:MQTT.Version
-    private weak var socket:Socket?//Informal agency
-    init(_ socket: Socket,conn:NWConnection) {
+    private let version:MQTT.Version
+    private weak var socket:MQTT.Socket?//Informal agency
+    init(_ socket: MQTT.Socket,conn:NWConnection) {
         self.socket = socket
         self.version = socket.config.version
         self.conn = conn
@@ -61,7 +61,7 @@ class Reader:@unchecked Sendable{
         }
     }
     private func dispath(data:Data){
-        guard let type = PacketType(rawValue: self.header & 0xF0) else {
+        guard let type = PacketType(rawValue: header) ?? PacketType(rawValue: header & 0xF0) else {
             self.socket?.reader(self, didReceive: MQTTError.decodeError(.unrecognisedPacketType))
             return
         }

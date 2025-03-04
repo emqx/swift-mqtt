@@ -102,47 +102,47 @@ extension MQTT{
     }
 
     /// Implementation of ping pong mechanism
-    public final class Pinging:@unchecked Sendable{
+    final class Pinging:@unchecked Sendable{
         /// current pinging timeout tolerance
         public let timeout:TimeInterval
         /// current pinging time interval
         public let interval:TimeInterval
         /// mqtt client
-        private weak var socket:Socket!
+        private weak var delegate:Socket!
         /// task
         private var task:DelayTask? = nil
         private var pongRecived:Bool = false
-        init(_ socket:Socket,timeout:TimeInterval,interval:TimeInterval) {
-            self.socket = socket
+        init(_ delegate:Socket,timeout:TimeInterval,interval:TimeInterval) {
+            self.delegate = delegate
             self.timeout = timeout
             self.interval = interval
         }
         /// resume the pinging task
-        public func resume(){
-            if self.task == nil{
-                self.sendPing()
+        func resume(){
+            if task == nil{
+                sendPing()
             }
         }
         /// suspend the pinging task
         /// cancel running task
-        public func suspend(){
-            self.task = nil
+        func suspend(){
+            task = nil
         }
         func onPong(){
-            self.pongRecived = true
+            pongRecived = true
         }
         private func sendPing(){
-            self.pongRecived = false
-            self.socket.sendNoWait(PingreqPacket())
-            self.task = DelayTask(host: self)
+            pongRecived = false
+            delegate.sendPingreq()
+            task = DelayTask(host: self)
         }
         private func checkPong(){
-            if !self.pongRecived{
-                self.socket.directClose(reason: .pingTimeout)
+            if !pongRecived{
+                delegate.pingTimeout()
             }
         }
         private class DelayTask {
-            private weak var host:Pinging? = nil
+            private weak var host:Pinging!
             private var item1:DispatchWorkItem? = nil
             private var item2:DispatchWorkItem? = nil
             deinit{
@@ -155,7 +155,7 @@ extension MQTT{
                 let interval = host.interval
                 self.item1 = after(timeout){[weak self] in
                     guard let self else { return }
-                    self.host?.checkPong()
+                    self.host.checkPong()
                     self.item2 = self.after(interval){[weak self] in
                         guard let self else { return }
                         self.host?.sendPing()
@@ -164,7 +164,7 @@ extension MQTT{
             }
             private func after(_ time:TimeInterval,block:@escaping (()->Void))->DispatchWorkItem{
                 let item = DispatchWorkItem(block: block)
-                DispatchQueue.global().asyncAfter(deadline: .now() + time, execute: item)
+                self.host.delegate.queue.asyncAfter(deadline: .now() + time, execute: item)
                 return item
             }
         }
