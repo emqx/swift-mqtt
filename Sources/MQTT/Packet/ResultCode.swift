@@ -133,7 +133,7 @@ import Foundation
 /// a failure. These are returned by CONNACK, PUBACK, PUBREC, PUBREL, PUBCOMP, DISCONNECT and
 /// AUTH packets
 ///
-public enum ResultCode:Sendable,Equatable{
+public enum ResultCode:Sendable,Hashable{
     case auth(Auth)
     case connectv3(ConnectV3)
     case connectv5(ConnectV5)
@@ -143,7 +143,7 @@ public enum ResultCode:Sendable,Equatable{
     case unsuback(Unsuback)
 }
 extension ResultCode{
-    public enum Auth: UInt8,Sendable,Equatable {
+    public enum Auth: UInt8,Sendable,Hashable {
         case success = 0x00
         /// Continue the authentication with another step
         case continueAuthentication = 0x18
@@ -153,7 +153,7 @@ extension ResultCode{
         case unrecognisedReason = 0xFF
     }
     /// Value returned in connection error in v3
-    public enum ConnectV3: UInt8, Sendable,Equatable {
+    public enum ConnectV3: UInt8, Sendable,Hashable {
         /// connection was accepted
         case accepted = 0
         /// The Server does not support the version of the MQTT protocol requested by the Client.
@@ -169,7 +169,7 @@ extension ResultCode{
         /// Reason code was unrecognised
         case unrecognisedReason = 0xFF
     }
-    public enum ConnectV5: UInt8,Sendable,Equatable{
+    public enum ConnectV5: UInt8,Sendable,Hashable{
         /// connection was accepted
         case accepted = 0x00
         /// Unaccpeted and the Server either does not wish to reveal the reason or none of the other Reason Codes apply.
@@ -218,7 +218,7 @@ extension ResultCode{
         case unrecognisedReason = 0xFF
     }
 
-    public enum Disconnect: UInt8,Sendable,Equatable {
+    public enum Disconnect: UInt8,Sendable,Hashable {
         case normal = 0x00
         /// The Client wishes to disconnect but requires that the Server also publishes its Will Message.
         case disconnectWithWill = 0x04
@@ -281,7 +281,7 @@ extension ResultCode{
         case unrecognisedReason = 0xFF
     }
     /// include `PUBACK` `PUBREC` `PUBREL` `PUBCOMB`
-    public enum Puback: UInt8,Sendable,Equatable {
+    public enum Puback: UInt8,Sendable,Hashable {
         case success = 0x00
         /// The `PUBLISH` message is accepted but there are no subscribers. This is sent only by the Server. If the Server knows that
         /// there are no matching subscribers, it MAY use this Reason Code instead of 0x00 (Success).
@@ -307,7 +307,7 @@ extension ResultCode{
         case unrecognisedReason = 0xFF
     }
 
-    public enum Suback: UInt8,Sendable,Equatable {
+    public enum Suback: UInt8,Sendable,Hashable {
         /// QoS0 is available
         case grantedQoS0 = 0x00
         /// The subscription is accepted and the maximum QoS sent will be QoS 1. This might be a lower QoS than was requested.
@@ -335,7 +335,7 @@ extension ResultCode{
         case unrecognisedReason = 0xFF
     }
 
-    public enum Unsuback: UInt8,Sendable,Equatable {
+    public enum Unsuback: UInt8,Sendable,Hashable {
         case success = 0x00
         /// No matching Topic Filter is being used by the Client.
         case noSubscriptionExisted = 0x11

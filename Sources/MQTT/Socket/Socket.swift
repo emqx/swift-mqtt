@@ -64,10 +64,14 @@ extension MQTT{
                         conn = nil
                         if let task = self.connTask{
                             switch reason{
-                            case .networkError(let error):
-                                task.done(with:error)
                             case .normalError(let error):
                                 task.done(with: error)
+                            case .networkError(let error):
+                                task.done(with: error)
+                            case .clientClosed(let code):
+                                task.done(with: MQTTError.clientClosed(code))
+                            case .serverClosed(let code):
+                                task.done(with: MQTTError.serverClosed(code))
                             default:
                                 task.done(with:MQTTError.connectFailed())
                             }
@@ -158,7 +162,8 @@ extension MQTT.Socket{
         // posix network unreachable
         // check your borker address is reachable
         // the monitor just known internet is reachable
-        if case .networkError(let err) = reason,case .posix(let posix) = err{
+        if case .networkError(let err) = reason,
+           case .posix(let posix) = err{
             switch posix{
             case .ENETUNREACH,.ENETDOWN:
                 self.status = .closed(reason)
@@ -419,7 +424,14 @@ extension MQTT.Socket{
         self.directClose(reason: nil)
     }
     func reader(_ reader: Reader, didReceive error: any Error) {
-        MQTT.Logger.debug("RECV: \(error)")
+        MQTT.Logger.error("RECV: \(error)")
+        self.clearAllTask(with: error)
+        switch error{
+        case let err as NWError:
+            self.tryClose(reason: .networkError(err))
+        default:
+            self.tryClose(reason: .normalError(error))
+        }
         self.onError?(error)
     }
     func reader(_ reader: Reader, didReceive packet: Packet) {
@@ -430,9 +442,8 @@ extension MQTT.Socket{
             self.pinging?.onPong()
         case .DISCONNECT:
             let disconnect = packet as! DisconnectPacket
-            self.closeAllTask(with: disconnect)
-            
-            self.tryClose(reason: .normalError(MQTTError.serverClosed(disconnect.code)))
+            self.clearAllTask(with: MQTTError.serverClosed(disconnect.code))
+            self.tryClose(reason: .serverClosed(disconnect.code))
         case .PINGREQ:
             self.sendNoWait(PingrespPacket())
         //----------------------------------need callback by packet type----------------------------------
@@ -462,12 +473,12 @@ extension MQTT.Socket{
             MQTT.Logger.error("Unexpected MQTT Message:\(packet)")
         }
     }
-    private func closeAllTask(with packet:DisconnectPacket){
+    private func clearAllTask(with error:Error){
         self.passiveTasks.forEach { id,task in
-            task.done(with: MQTTError.serverClosed(packet.code))
+            task.done(with: error)
         }
         self.activeTasks.forEach { id,task in
-            task.done(with: MQTTError.serverClosed(packet.code))
+            task.done(with: error)
         }
         self.passiveTasks = [:]
         self.activeTasks = [:]

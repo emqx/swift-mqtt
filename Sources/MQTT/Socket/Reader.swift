@@ -84,7 +84,7 @@ class Reader:@unchecked Sendable{
                 return
             }
             if let error{
-                self.socket?.reader(self, didReceive: MQTTError.decodeError(.networkError(error)))
+                self.socket?.reader(self, didReceive: error)
                 return
             }
             guard let data = content,data.count == length else{
@@ -98,7 +98,7 @@ class Reader:@unchecked Sendable{
         conn.receiveMessage {[weak self] content, contentContext, isComplete, error in
             guard let self else{ return }
             if let error{
-                self.socket?.reader(self, didReceive: MQTTError.decodeError(.networkError(error)))
+                self.socket?.reader(self, didReceive: error)
                 return
             }
             guard let data = content else{
