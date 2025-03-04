@@ -64,7 +64,7 @@ extension MQTT{
             case .v3_1_1: return "3.1.1"
             }
         }
-        var byte: UInt8 {
+        var uint8: UInt8 {
             switch self {
             case .v3_1_1: return 4
             case .v5_0: return 5
@@ -73,27 +73,30 @@ extension MQTT{
     }
     public final class Config:@unchecked Sendable{
         /// protocol version init in client
-        public internal(set) var version:MQTT.Version
+        public let version:MQTT.Version
         /// Version of MQTT server client is connecting to
-        public internal(set)var clientId: String
+        public internal(set) var clientId: String
         /// MQTT user name.
         public var username: String? = nil
         /// MQTT password.
         public var password: String? = nil
-        /// enable auto ping
-        public var pingEnabled: Bool = true
-        /// timeout second for ping
-        public var pingTimeout: TimeInterval = 5
-        /// timeout for connecting to server
-        public var connectTimeout: TimeInterval = 5
-        /// timeout millisecond  for pubulish  ack
-        public var publishTimeout: UInt64 = 5000
-        /// MQTT keep alive period.
+        /// MQTT keep alive period in second.
         public var keepAlive: UInt16 = 60{
             didSet{
                 assert(keepAlive>0, "keepalive has to be greater than zero!")
             }
         }
+        /// enable `keepAlive`
+        public var pingEnabled: Bool = true
+        /// timeout second for `keepAlive`
+        public var pingTimeout: TimeInterval = 5
+        /// timeout millisecond  for connecting to server
+        /// - Important: This setting does not take effect in the quic protocol. In the quic protocol is fixed at 30s and cannot be modified
+        public var connectTimeout: UInt64 = 30 * 1000
+        /// timeout millisecond  for pubulish  flow ac
+        public var publishTimeout: UInt64 = 5 * 1000
+        /// timeout millisecond for write data to connection
+        public var writingTimeout: UInt64 = 5 * 1000
         init(_ version:Version,clientId:String){
             self.version = version
             self.clientId = clientId
@@ -103,11 +106,9 @@ extension MQTT{
 extension MQTT{
     class Task:@unchecked Sendable{
         private let promise:Promise<Packet>
-        private var sendPacket: Packet
         private var timeoutItem:DispatchWorkItem?
-        init(_ packet:Packet){
+        init(){
             self.promise = .init()
-            self.sendPacket = packet
         }
         func done(with packet: Packet){
             self.promise.done(packet)
@@ -119,12 +120,12 @@ extension MQTT{
             self.timeoutItem?.cancel()
             self.timeoutItem = nil
         }
-        func start(_ timeout:UInt64? = nil) -> Promise<Packet>{
+        func start(in queue:DispatchQueue, timeout:UInt64? = nil) -> Promise<Packet>{
             if let timeout{
                 let item = DispatchWorkItem{
                     self.promise.done(MQTTError.timeout)
                 }
-                DispatchQueue.global().asyncAfter(deadline: .now()+TimeInterval(timeout), execute: item)
+                queue.asyncAfter(deadline: .now()+TimeInterval(timeout)/1000, execute: item)
                 self.timeoutItem = item
             }
             return self.promise

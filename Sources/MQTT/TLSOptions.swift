@@ -194,6 +194,7 @@ extension MQTT{
                     }
                     tls?.update_sec_options(quic.securityProtocolOptions)
                     let params = NWParameters(quic: quic)
+                    params.allowFastOpen = true // allow fast open
                     return (endpoint,params)
                 } else {
                     fatalError("Never happend")
@@ -201,32 +202,40 @@ extension MQTT{
             case .tcp:
                 let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
                 let tcp = opt as! NWProtocolTCP.Options
+                tcp.connectionTimeout = Int(config.connectTimeout/1000)
                 let params = NWParameters(tls: nil, tcp: tcp)
+                params.allowFastOpen = true // allow fast open
                 return (endpoint,params)
             case .tls:
                 let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
                 let tcp = opt as! NWProtocolTCP.Options
+                tcp.connectionTimeout = Int(config.connectTimeout/1000)
                 let tlsOptions = NWProtocolTLS.Options()
                 tls?.update_sec_options(tlsOptions.securityProtocolOptions)
                 let params = NWParameters(tls: tlsOptions, tcp: tcp)
+                params.allowFastOpen = true // allow fast open
                 return (endpoint,params)
             case .wss:
                 let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
                 let tcp = opt as! NWProtocolTCP.Options
+                tcp.connectionTimeout = Int(config.connectTimeout/1000)
                 let tlsOptions = NWProtocolTLS.Options()
                 tls?.update_sec_options(tlsOptions.securityProtocolOptions)
                 let params = NWParameters(tls: tlsOptions, tcp: tcp)
                 let wsOptions = NWProtocolWebSocket.Options()
                 wsOptions.setSubprotocols(["mqtt"])
                 params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
+                params.allowFastOpen = true // allow fast open
                 return (endpoint,params)
             case .ws:
                 let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
                 let tcp = opt as! NWProtocolTCP.Options
+                tcp.connectionTimeout = Int(config.connectTimeout/1000)
                 let params = NWParameters(tls: nil, tcp: tcp)
                 let wsOptions = NWProtocolWebSocket.Options()
                 wsOptions.setSubprotocols(["mqtt"])
                 params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
+                params.allowFastOpen = true // allow fast open
                 return (endpoint,params)
             }
         }

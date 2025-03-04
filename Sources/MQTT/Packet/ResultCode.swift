@@ -135,7 +135,7 @@ import Foundation
 ///
 public enum ResultCode:Sendable,Equatable{
     case auth(Auth)
-    case connect(ConnectV3)
+    case connectv3(ConnectV3)
     case connectv5(ConnectV5)
     case disconnect(Disconnect)
     case puback(Puback)
