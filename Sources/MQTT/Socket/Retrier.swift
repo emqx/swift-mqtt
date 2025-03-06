@@ -13,7 +13,7 @@ extension MQTT{
     /// The retries filter out some cases that definitely do not need to be retried, and the rest need to be filtered by the user.
     /// The unfiltered cases are considered to need to be retried
     public final class Retrier:@unchecked Sendable{
-        /// Filter out causes that do not need to be repeated, and return true if retries are not required
+        /// Filter out causes that do not need to be retry. Return true if retries are not required
         public typealias Filter = @Sendable (MQTT.CloseReason)->Bool
         /// Retry backoff policy
         public enum Policy:Sendable{
@@ -103,6 +103,7 @@ extension MQTT{
 
     /// Implementation of ping pong mechanism
     final class Pinging:@unchecked Sendable{
+        private var times:Int = 0
         /// current pinging timeout tolerance
         public let timeout:TimeInterval
         /// current pinging time interval
@@ -120,7 +121,8 @@ extension MQTT{
         /// resume the pinging task
         func resume(){
             if task == nil{
-                sendPing()
+                times = 0
+                task = DelayTask(host: self)
             }
         }
         /// suspend the pinging task
@@ -134,12 +136,16 @@ extension MQTT{
         private func sendPing(){
             pongRecived = false
             delegate.sendPingreq()
-            task = DelayTask(host: self)
         }
         private func checkPong(){
             if !pongRecived{
-                delegate.pingTimeout()
+                times += 1
+                if times >= delegate.config.pingTimes{
+                    times = 0
+                    delegate.pingTimeout()
+                }
             }
+            task = DelayTask(host: self)
         }
         private class DelayTask {
             private weak var host:Pinging!
@@ -153,12 +159,12 @@ extension MQTT{
                 self.host = host
                 let timeout = host.timeout
                 let interval = host.interval
-                self.item1 = after(timeout){[weak self] in
+                self.item1 = after(interval){[weak self] in
                     guard let self else { return }
-                    self.host.checkPong()
-                    self.item2 = self.after(interval){[weak self] in
+                    self.host.sendPing()
+                    self.item2 = self.after(timeout){[weak self] in
                         guard let self else { return }
-                        self.host?.sendPing()
+                        self.host.checkPong()
                     }
                 }
             }
@@ -169,5 +175,4 @@ extension MQTT{
             }
         }
     }
-
 }

@@ -11,6 +11,7 @@ public protocol MQTTDelegate:AnyObject,Sendable{
     func mqtt(_ mqtt: MQTT.Client, didReceive message:MQTT.Message)
     func mqtt(_ mqtt: MQTT.Client, didReceive error:Error)
 }
+
 public extension Notification{
     /// Parse mqtt message from `Notification` conveniently
     func mqttMesaage()->(client:MQTT.Client,message:MQTT.Message)?{
@@ -46,10 +47,6 @@ public extension Notification{
         return (client,error)
     }
 }
-
-public typealias Authflow = (@Sendable (AuthV5) -> Promise<AuthV5>)
-
-
 extension MQTT{
     public enum ObserverType:String{
         case error = "swift.mqtt.received.error"
@@ -57,20 +54,29 @@ extension MQTT{
         case message = "swift.mqtt.received.message"
         var notifyName:Notification.Name{ .init(rawValue: rawValue) }
     }
+}
+
+/// Auth workflow
+public typealias Authflow = (@Sendable (Auth) -> Promise<Auth>)
+
+extension MQTT{
+    ///Contains common logic for both v3 and v5 clients
     open class Client: @unchecked Sendable{
         private let notify = NotificationCenter()
         private let socket:Socket
         @Safely private var packetId: UInt16 = 0
-        /// The delegate and observers callback queue
-        public var delegateQueue:DispatchQueue = .main
         /// readonly confg
         public var config:Config { socket.config }
-        /// readonly status
+        /// readonly mqtt client connection status
         public var status:Status { socket.status }
+        /// mqtt client version
+        public var version:Version { socket.config.version }
         /// readonly
         public var isOpened:Bool { socket.status == .opened }
         /// network endpoint
         public var endpoint:MQTT.Endpoint { socket.endpoint }
+        /// The delegate and observers callback queue
+        public var delegateQueue:DispatchQueue = .main
         /// mqtt delegate
         public weak var delegate:MQTTDelegate?{
             didSet{
@@ -110,7 +116,7 @@ extension MQTT{
             }
         }
         
-        /// Initial v5 client object
+        /// Initial mqtt  client object
         ///
         /// - Parameters:
         ///   - clientID: Client Identifier
@@ -119,7 +125,7 @@ extension MQTT{
         init(_ clientId: String, endpoint:Endpoint,version:MQTT.Version) {
             socket = Socket(clientId, endpoint: endpoint,version: version)
         }
-        /// Enale the autto reconnect mechanism
+        /// Start the auto reconnect mechanism
         ///
         /// - Parameters:
         ///    - policy: Retry policcy
@@ -177,7 +183,7 @@ extension MQTT{
 
 extension MQTT.Client{
     open class V3:MQTT.Client, @unchecked Sendable{
-        /// Initial v5 client object
+        /// Initial v3 client object
         ///
         /// - Parameters:
         ///   - clientID: Client Identifier
@@ -227,7 +233,6 @@ extension MQTT.Client.V3{
         var properties = Properties()
         if self.config.version == .v5_0, cleanStart == false {
             properties.append(.sessionExpiryInterval(0xFFFF_FFFF))
-            
         }
         let packet = ConnectPacket(
             cleanSession: cleanStart,
@@ -262,6 +267,21 @@ extension MQTT.Client.V3{
         let packet = PublishPacket(id: nextPacketId(), message: message)
         return self.socket.publish(packet: packet).then { _ in }
     }
+    /// Publish message to topic
+    ///
+    /// - Parameters:
+    ///    - topic: Topic name on which the message is published
+    ///    - payload: Message payload
+    ///    - qos: Quality of Service for message.
+    ///    - retain: Whether this is a retained message.
+    ///
+    /// - Returns: `Promise<Void>` waiting for publish to complete.
+    ///
+    @discardableResult
+    public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false)->Promise<Void>{
+        let data = payload.data(using: .utf8) ?? Data()
+        return self.publish(to:topic, payload: data,qos: qos,retain: retain)
+    }
     /// Subscribe to topic
     /// - Parameter topic: Subscription infos
     /// - Returns: `Promise<Suback>` waiting for subscribe to complete. Will wait for SUBACK message from server
@@ -279,15 +299,11 @@ extension MQTT.Client.V3{
     public func subscribe(to subscriptions: [Subscribe]) -> Promise<Suback> {
         let subscriptions: [Subscribe.V5] = subscriptions.map { .init(topicFilter: $0.topicFilter, qos: $0.qos) }
         let packet = SubscribePacket(id: nextPacketId(), properties: [],subscriptions: subscriptions)
-        return self.socket.subscribe(packet: packet)
-            .then { message in
-                let returnCodes = message.codes.map { Suback.ReturnCode(rawValue: $0.rawValue) ?? .failure }
-                return Suback(returnCodes: returnCodes)
-            }
+        return self.socket.subscribe(packet: packet).then { try $0.suback() }
     }
     /// Unsubscribe from topic
     /// - Parameter subscriptions: List of subscriptions to unsubscribe from
-    /// - Returns: `Promise` waiting for unsubscribe to complete. Will wait for UNSUBACK message from server
+    /// - Returns: `Promise<Void>` waiting for unsubscribe to complete. Will wait for UNSUBACK message from server
     ///
     @discardableResult
     public func unsubscribe(from topic: String) -> Promise<Void> {
@@ -327,11 +343,11 @@ extension MQTT.Client.V5{
     ///    - retain: Whether this is a retained message.
     ///    - properties: properties to attach to publish message
     ///
-    /// - Returns: `Promise<PubackV5?>` waiting for publish to complete.
+    /// - Returns: `Promise<Puback?>` waiting for publish to complete.
     /// Depending on `QoS` setting the promise will complete  after message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are received.
-    /// `QoS1` and above return an `PubackV5` which contains a `reason` and `properties`
+    /// `QoS0` retrun nil. `QoS1` and above return an `Puback` which contains a `code` and `properties`
     @discardableResult
-    public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = [])->Promise<PubackV5?>{
+    public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = [])->Promise<Puback?>{
         let data = payload.data(using: .utf8) ?? Data()
         return self.publish(to:topic, payload: data,qos: qos,retain: retain,properties: properties)
     }
@@ -344,25 +360,24 @@ extension MQTT.Client.V5{
     ///    - retain: Whether this is a retained message.
     ///    - properties: properties to attach to publish message
     ///
-    /// - Returns: `Promise<PubackV5?>` waiting for publish to complete.
+    /// - Returns: `Promise<Puback?>` waiting for publish to complete.
     /// Depending on `QoS` setting the promise will complete  after message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are received.
-    /// `QoS1` and above return an `PubackV5` which contains a `reason` and `properties`
+    /// `QoS0` retrun nil. `QoS1` and above return an `Puback` which contains a `code` and `properties`
     @discardableResult
-    public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<PubackV5?> {
+    public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<Puback?> {
         let message = MQTT.Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: properties)
         return socket.publish(packet: PublishPacket(id: nextPacketId(), message: message))
     }
-    
     /// Subscribe to topic
     ///
     /// - Parameters:
     ///    - topic: Subscription topic
     ///    - properties: properties to attach to subscribe message
     ///
-    /// - Returns: `Promise<SUBACK.V5>` waiting for subscribe to complete. Will wait for `SUBACK` message from server and
+    /// - Returns: `Promise<Suback>` waiting for subscribe to complete. Will wait for `SUBACK` message from server and
     ///     return its contents
     @discardableResult
-    public func subscribe(to topic:String,qos:MQTTQoS = .atLeastOnce,properties:Properties = [])->Promise<Suback.V5>{
+    public func subscribe(to topic:String,qos:MQTTQoS = .atLeastOnce,properties:Properties = [])->Promise<Suback>{
         return self.subscribe(to: [Subscribe.V5(topicFilter: topic, qos: qos)], properties: properties)
     }
     /// Subscribe to topic
@@ -371,24 +386,22 @@ extension MQTT.Client.V5{
     ///    - subscriptions: Subscription infos
     ///    - properties: properties to attach to subscribe message
     ///
-    /// - Returns: `Promise<SUBACK.V5>` waiting for subscribe to complete. Will wait for `SUBACK` message from server and
+    /// - Returns: `Promise<Suback>` waiting for subscribe to complete. Will wait for `SUBACK` message from server and
     ///     return its contents
     @discardableResult
-    public func subscribe(to subscriptions:[Subscribe.V5],properties:Properties = [])->Promise<Suback.V5>{
+    public func subscribe(to subscriptions:[Subscribe.V5],properties:Properties = [])->Promise<Suback>{
         let packet = SubscribePacket(id: nextPacketId(), properties: properties, subscriptions: subscriptions)
-        return socket.subscribe(packet: packet).then { suback in
-            return Suback.V5(codes: suback.codes,properties: properties)
-        }
+        return self.socket.subscribe(packet: packet).then { try $0.suback() }
     }
     
     /// Unsubscribe from topic
     /// - Parameters:
     ///   - topic: Topic to unsubscribe from
     ///   - properties: properties to attach to unsubscribe message
-    /// - Returns: `Promise<SUBACK.V5>` waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
+    /// - Returns: `Promise<Unsuback>` waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
     ///     return its contents
     @discardableResult
-    public func unsubscribe(from topic:String,properties:Properties = []) -> Promise<Suback.V5> {
+    public func unsubscribe(from topic:String,properties:Properties = []) -> Promise<Unsuback> {
         return self.unsubscribe(from:[topic], properties: properties)
     }
     
@@ -396,14 +409,12 @@ extension MQTT.Client.V5{
     /// - Parameters:
     ///   - topics: List of topic to unsubscribe from
     ///   - properties: properties to attach to unsubscribe message
-    /// - Returns: `Promise<Suback.V5>` waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
+    /// - Returns: `Promise<Unsuback>` waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
     ///     return its contents
     @discardableResult
-    public func unsubscribe(from topics:[String],properties:Properties = []) -> Promise<Suback.V5> {
+    public func unsubscribe(from topics:[String],properties:Properties = []) -> Promise<Unsuback> {
         let packet = UnsubscribePacket(id: nextPacketId(), subscriptions: topics, properties: properties)
-        return socket.unsubscribe(packet: packet).then { suback in
-            return Suback.V5(codes: suback.codes,properties: properties)
-        }
+        return self.socket.unsubscribe(packet: packet).then { try $0.unsuback() }
     }
 
 
@@ -422,16 +433,15 @@ extension MQTT.Client.V5{
     ///   - cleanStart: should we start with a new session
     ///   - properties: properties to attach to connect message
     ///   - authflow: The authentication workflow. This is currently unimplemented.
-    /// - Returns: `Promise<ConnackV5>` to be updated with connack
+    /// - Returns: `Promise<Connack>` to be updated with connack
     ///
     @discardableResult
     public func open(
         will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool, properties: Properties)? = nil,
         cleanStart: Bool = true,
         properties: Properties = [],
-        authflow: (@Sendable (AuthV5) -> Promise<AuthV5>)? = nil
-    ) -> Promise<ConnackV5> {
-        
+        authflow: Authflow? = nil
+    ) -> Promise<Connack> {
         let publish = will.map {
             MQTT.Message(
                 qos: .atMostOnce,
@@ -451,14 +461,7 @@ extension MQTT.Client.V5{
             properties: properties,
             will: publish
         )
-
-        return socket.open(packet, authflow: authflow).then {
-            .init(
-                code: ResultCode.ConnectV5(rawValue: $0.returnCode) ?? .unrecognisedReason,
-                properties: $0.properties.connack(),
-                sessionPresent: $0.sessionPresent
-            )
-        }
+        return socket.open(packet, authflow: authflow).then{ $0.ack() }
     }
     /// Close from server
     /// - Parameters:
@@ -475,10 +478,10 @@ extension MQTT.Client.V5{
     /// - Parameters:
     ///   - properties: properties to attach to auth packet. Must include `authenticationMethod`
     ///   - authflow: Respond to auth packets from server
-    /// - Returns: `Promise<AuthV5>` final auth packet returned from server
+    /// - Returns: `Promise<Auth>` final auth packet returned from server
     ///
     @discardableResult
-    public func auth(_ properties: Properties, authflow: Authflow? = nil) -> Promise<AuthV5> {
+    public func auth(_ properties: Properties, authflow: Authflow? = nil) -> Promise<Auth> {
         socket.auth(properties: properties, authflow: authflow)
     }
 }

@@ -9,11 +9,11 @@ import Foundation
 import Network
 
 class Reader:@unchecked Sendable{
-    private let conn:NWConnection
     private var header:UInt8 = 0
     private var length:Int = 0
     private var multiply = 1
-    private let version:MQTT.Version
+    private var version:MQTT.Version
+    private weak var conn:NWConnection?
     private weak var socket:MQTT.Socket?//Informal agency
     init(_ socket: MQTT.Socket,conn:NWConnection) {
         self.socket = socket
@@ -75,16 +75,16 @@ class Reader:@unchecked Sendable{
         self.readHeader()
     }
     private func readData(_ length:Int,finish:(@Sendable (Data)->Void)?){
-        conn.receive(minimumIncompleteLength: length, maximumLength: length, completion: {[weak self] content, contentContext, isComplete, error in
+        conn?.receive(minimumIncompleteLength: length, maximumLength: length, completion: {[weak self] content, contentContext, isComplete, error in
             guard let self else{
                 return
             }
             if isComplete{
-                self.socket?.readCompleted(self)
+                self.socket?.reader(self, didReceive: MQTTError.decodeError(.streamCompleted))
                 return
             }
             if let error{
-                self.socket?.reader(self, didReceive: MQTTError.decodeError(.networkError(error)))
+                self.socket?.reader(self, didReceive: error)
                 return
             }
             guard let data = content,data.count == length else{
@@ -95,10 +95,14 @@ class Reader:@unchecked Sendable{
         })
     }
     private func readMessage(){
-        conn.receiveMessage {[weak self] content, contentContext, isComplete, error in
+        conn?.receiveMessage {[weak self] content, contentContext, isComplete, error in
             guard let self else{ return }
+            if isComplete{
+                self.socket?.reader(self, didReceive: MQTTError.decodeError(.streamCompleted))
+                return
+            }
             if let error{
-                self.socket?.reader(self, didReceive: MQTTError.decodeError(.networkError(error)))
+                self.socket?.reader(self, didReceive: error)
                 return
             }
             guard let data = content else{

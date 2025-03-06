@@ -41,6 +41,18 @@ protocol Packet: CustomStringConvertible, Sendable {
 extension Packet {
     /// default packet to zero
     var id: UInt16 { 0 }
+    func puback(code:ResultCode.Puback = .success)->PubackPacket{
+        return PubackPacket(id: id, type: .PUBACK,code: code)
+    }
+    func pubrec(code:ResultCode.Puback = .success)->PubackPacket{
+        return PubackPacket(id: id, type: .PUBREC,code: code)
+    }
+    func pubrel(code:ResultCode.Puback = .success)->PubackPacket{
+        return PubackPacket(id: id, type: .PUBREL,code: code)
+    }
+    func pubcomp(code:ResultCode.Puback = .success)->PubackPacket{
+        return PubackPacket(id: id, type: .PUBCOMP,code: code)
+    }
 }
 
 
@@ -402,8 +414,8 @@ struct PubackPacket: Packet {
             if remainingData.readableBytes == 0 {
                 return PubackPacket(id: packetId, type: packet.type)
             }
-            guard let reasonByte: UInt8 = remainingData.readInteger(),
-                  let code = ResultCode.Puback(rawValue: reasonByte) else {
+            guard let codeByte: UInt8 = remainingData.readInteger(),
+                  let code = ResultCode.Puback(rawValue: codeByte) else {
                 throw MQTTError.decodeError(.unexpectedTokens)
             }
             let properties = try Properties.read(from: &remainingData)
@@ -418,19 +430,22 @@ struct PubackPacket: Packet {
         }
         return 2
     }
+    func ack()->Puback{
+        .init(code: code,properties: properties)
+    }
+    
 }
-
+/// `SUBACK` `UNSUBACK`
 struct SubackPacket: Packet {
-    var description: String { "\(self.type)(id:\(id),reason:\(codes))" }
     let id: UInt16
     let type: PacketType
-    let codes: [ResultCode.Suback]
+    let retrunCodes: [UInt8]
     let properties: Properties
-
-    private init(id: UInt16,type: PacketType, codes: [ResultCode.Suback], properties: Properties = .init()) {
+    var description: String { "\(self.type)(id:\(id),codes:\(retrunCodes))" }
+    private init(id: UInt16,type: PacketType, retrunCodes: [UInt8], properties: Properties = .init()) {
         self.id = id
         self.type = type
-        self.codes = codes
+        self.retrunCodes = retrunCodes
         self.properties = properties
     }
 
@@ -447,16 +462,8 @@ struct SubackPacket: Packet {
         } else {
             properties = .init()
         }
-        var codes: [ResultCode.Suback]?
-        if let reasonBytes = remainingData.readData() {
-            codes = try reasonBytes.map { byte -> ResultCode.Suback in
-                guard let code = ResultCode.Suback(rawValue: byte) else {
-                    throw MQTTError.decodeError(.unexpectedTokens)
-                }
-                return code
-            }
-        }
-        return SubackPacket(id:packetId,type: packet.type, codes: codes ?? [], properties: properties)
+        let codes = remainingData.readData()?.map{ $0 }
+        return SubackPacket(id:packetId,type: packet.type, retrunCodes: codes ?? [], properties: properties)
     }
 
     func packetSize(version: MQTT.Version) -> Int {
@@ -465,6 +472,24 @@ struct SubackPacket: Packet {
             return 2 + Serializer.varintPacketSize(propertiesPacketSize) + propertiesPacketSize
         }
         return 2
+    }
+    func unsuback()throws->Unsuback{
+        let codes = try retrunCodes.compactMap { int in
+            if let code = ResultCode.Unsuback(rawValue: int){
+                return code
+            }
+            throw MQTTError.decodeError(.unexpectedTokens)
+        }
+        return Unsuback(codes: codes,properties: properties)
+    }
+    func suback()throws-> Suback{
+        let codes = try retrunCodes.compactMap { int in
+            if let code = ResultCode.Suback(rawValue: int){
+                return code
+            }
+            throw MQTTError.decodeError(.unexpectedTokens)
+        }
+        return Suback(codes: codes,properties: properties)
     }
 }
 
@@ -494,9 +519,9 @@ struct PingrespPacket: Packet {
 
 struct DisconnectPacket: Packet {
     var type: PacketType { .DISCONNECT }
-    var description: String { "DISCONNECT(reason:\(code))" }
     let code: ResultCode.Disconnect
     let properties: Properties
+    var description: String { "DISCONNECT(code:\(code))" }
     init(code: ResultCode.Disconnect = .normal, properties: Properties = .init()) {
         self.code = code
         self.properties = properties
@@ -521,8 +546,8 @@ struct DisconnectPacket: Packet {
             if buffer.readableBytes == 0 {
                 return DisconnectPacket(code: .normal)
             }
-            guard let reasonByte: UInt8 = buffer.readInteger(),
-                let code = ResultCode.Disconnect(rawValue: reasonByte) else {
+            guard let byte: UInt8 = buffer.readInteger(),
+                let code = ResultCode.Disconnect(rawValue: byte) else {
                 throw MQTTError.decodeError(.unexpectedTokens)
             }
             let properties = try Properties.read(from: &buffer)
@@ -564,13 +589,23 @@ struct ConnackPacket: Packet {
             properties: properties
         )
     }
+    func ack()->Connack{
+        .init(
+            code: ResultCode.Connect(rawValue: returnCode) ?? .unrecognisedReason,
+            properties: properties,
+            sessionPresent: sessionPresent
+        )
+    }
 }
 
 struct AuthPacket: Packet {
     var type: PacketType { .AUTH }
-    var description: String { "AUTH(code:\(code))" }
     let code: ResultCode.Auth
     let properties: Properties
+    var description: String { "AUTH(code:\(code))" }
+    func ack()->Auth{
+        .init(code: code, properties: properties)
+    }
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
         writeFixedHeader(packetType: self.type, size: self.packetSize, to: &byteBuffer)
         if self.code != .success || self.properties.count > 0 {
@@ -584,13 +619,13 @@ struct AuthPacket: Packet {
         if remainingData.readableBytes == 0 {
             return AuthPacket(code: .success, properties: .init())
         }
-        guard let reasonByte: UInt8 = remainingData.readInteger(),
-              let reason = ResultCode.Auth(rawValue: reasonByte)
+        guard let codeByte: UInt8 = remainingData.readInteger(),
+              let code = ResultCode.Auth(rawValue: codeByte)
         else {
             throw MQTTError.decodeError(.unexpectedTokens)
         }
         let properties = try Properties.read(from: &remainingData)
-        return AuthPacket(code: reason, properties: properties)
+        return AuthPacket(code: code, properties: properties)
     }
     var packetSize: Int {
         if self.code == .success, self.properties.count == 0 {

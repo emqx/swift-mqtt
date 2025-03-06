@@ -86,10 +86,12 @@ extension MQTT{
                 assert(keepAlive>0, "keepalive has to be greater than zero!")
             }
         }
+        ///The max times the connection consecutive ping timeouts 
+        public var pingTimes:Int = 1
         /// enable `keepAlive`
         public var pingEnabled: Bool = true
         /// timeout second for `keepAlive`
-        public var pingTimeout: TimeInterval = 5
+        public var pingTimeout: TimeInterval = 10
         /// timeout millisecond  for connecting to server
         /// - Important: This setting does not take effect in the quic protocol. In the quic protocol is fixed at 30s and cannot be modified
         public var connectTimeout: UInt64 = 30 * 1000
@@ -129,31 +131,6 @@ extension MQTT{
                 self.timeoutItem = item
             }
             return self.promise
-        }
-    }
-}
-extension MQTT{
-    /// Array of inflight packets. Used to resend packets when reconnecting to server
-    struct Inflight : Sendable{
-        @Safely private(set) var packets: [Packet] = []
-        /// add packet
-        func add(packet: Packet) {
-            self.$packets.write { pkgs in
-                pkgs.append(packet)
-            }
-        }
-        /// remove packert
-        func remove(id: UInt16) {
-            self.$packets.write { pkgs in
-                guard let first = pkgs.firstIndex(where: { $0.id == id }) else { return }
-                pkgs.remove(at: first)
-            }
-        }
-        /// remove all packets
-        mutating func clear() {
-            self.$packets.write { pkgs in
-                pkgs = []
-            }
         }
     }
 }

@@ -8,6 +8,68 @@
 import Foundation
 import Network
 
+extension MQTT{
+    /// state machine
+    public enum Status:Sendable,Hashable,CustomStringConvertible{
+        public static func == (lhs: MQTT.Status, rhs: MQTT.Status) -> Bool {
+            lhs.hashValue == rhs.hashValue
+        }
+        case opened
+        case opening
+        case closing
+        case closed(CloseReason? = nil)
+        public var description: String{
+            switch self{
+            case .opening: return "opening"
+            case .closing: return "closing"
+            case .opened:  return "opened"
+            case .closed: return "closed"
+            }
+        }
+        public func hash(into hasher: inout Hasher) {
+            switch self {
+            case .opened:
+                0.hash(into: &hasher)
+            case .opening:
+                1.hash(into: &hasher)
+            case .closing:
+                2.hash(into: &hasher)
+            case .closed:
+                3.hash(into: &hasher)
+            }
+        }
+    }
+    ///  close reason
+    public enum CloseReason:Sendable,CustomStringConvertible{
+        /// close when ping timeout
+        case pingTimeout
+        /// auto close by network monitor when network unsatisfied
+        case unsatisfied
+        /// Errors other than `networkError()` ,`serverClosed()` and `clientClosed()`
+        /// When `MQTTError` exclude `serverClosed` `clientClosed`
+        case normalError(Error)
+        /// close when network error.
+        case networkError(NWError)
+        /// the server disconnected
+        case serverClosed(ResultCode.Disconnect)
+        /// user closed connectiion
+        case clientClosed(ResultCode.Disconnect)
+        public var description: String{
+            switch self{
+            case .unsatisfied: return "Unsatisfied"
+            case .pingTimeout: return "PingTimeout"
+            case .normalError(let error): return "Normal(\(error))"
+            case .networkError(let error): return "Network(\(error))"
+            case .serverClosed(let code): return "ServerClosed(\(code))"
+            case .clientClosed(let code): return "ClientClosed(\(code))"
+            }
+        }
+    }
+}
+
+///
+/// All explain for`NWError.tls(OSStatus)`
+///
 
 //CF_ENUM(OSStatus) {
 //    errSSLProtocol              = -9800,    /* SSL protocol error */
@@ -71,6 +133,7 @@ import Network
 //    /* non-fatal result codes */
 //    errSSLClientHelloReceived   = -9851,    /* SNI */
 //};
+
 //CF_ENUM(OSStatus)
 //{
 //    errSecSuccess                               = 0,       /* No error. */
@@ -90,58 +153,4 @@ import Network
 //    errSecAuthFailed                            = -25293,  /* The user name or passphrase you entered is not correct. */
 //};
 
-extension MQTT{
-    
-    /// state machine
-    public enum Status:Sendable,Hashable,CustomStringConvertible{
-        case opened
-        case opening
-        case closing
-        case closed(CloseReason? = nil)
-        public var description: String{
-            switch self{
-            case .opening: return "opening"
-            case .closing: return "closing"
-            case .opened:  return "opened"
-            case .closed:  return "closed"
-            }
-        }
-    }
-    ///  close reason
-    public enum CloseReason:Sendable,Hashable,CustomStringConvertible{
-        public static func == (lhs: MQTT.CloseReason, rhs: MQTT.CloseReason) -> Bool {
-            lhs.hashValue == rhs.hashValue
-        }
-        /// close when ping timeout
-        case pingTimeout
-        /// auto close by network monitor when network unsatisfied
-        case unsatisfied
-        /// some special error
-        case normalError(Error)
-        /// close when network error.
-        case networkError(NWError)
-        /// decode or encode packet error
-//        case decodeError(MQTTError.Decode)
-        /// connect fail with retrun code
-//        case connectFail(ResultCode.ConnectV5)
-        /// The client actively closes the connection
-//        case clientClosed(ResultCode.Disconnect,Properties)
-        /// The server actively closes the connection and receive disconnect packet 
-//        case serverClosed(ResultCode.Disconnect,Properties)
-        public var description: String{
-            switch self{
-            case .unsatisfied: return "network unsatisfied"
-            case .pingTimeout: return "ping timeout"
-//            case .decodeError(let error): return "\(error)"
-//            case .connectFail(let code):  return "connect error code:\(code)"
-            case .networkError(let error): return "network error \(error)"
-            case .normalError(let error): return "normal error \(error)"
-//            case .serverClosed(let code,_):return "server closed code:\(code)"
-//            case .clientClosed(let code,_):return "client closed code:\(code)"
-            }
-        }
-        public func hash(into hasher: inout Hasher) {
-            self.description.hash(into: &hasher)
-        }
-    }
-}
+

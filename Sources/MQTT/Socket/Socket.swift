@@ -16,22 +16,23 @@ extension MQTT{
         var onMessage:((Message)->Void)?
         let endpoint:Endpoint
         let config:Config
+        //--- Keep safely by sharing a same status lock ---
+        private let safe = Safely()//status safe lock
         private var conn:NWConnection?
+        private var reader:Reader?
         private var retrier:Retrier?
         private var pinging:Pinging?
         private var monitor:Monitor?
-        private var activeTasks:[UInt16:Task] = [:] // active workflow tasks
-        private var passiveTasks:[UInt16:Task] = [:] // passive workflow tasks
-        private var connTask:Task?
-        private var authTask:Task?
-        private var reader:Reader?
         private var retrying:Bool = false
-        private var version:Version { config.version }
-        private var inflight:Inflight = .init()
         private var authflow:Authflow?
         private var connPacket:ConnectPacket?
         private var connParams:ConnectParams = .init()
-
+        //--- Keep safely themself ---
+        @Safely private var connTask:Task?
+        @Safely private var authTask:Task?
+        @Safely private var inflight:[Packet] = []
+        @Safely private var activeTasks:[UInt16:Task] = [:] // active workflow tasks
+        @Safely private var passiveTasks:[UInt16:Task] = [:] // passive workflow tasks
         /// Initial v3 client object
         ///
         /// - Parameters:
@@ -40,47 +41,61 @@ extension MQTT{
         init(_ clientId: String, endpoint:Endpoint,version:Version){
             self.config = .init(version, clientId: clientId)
             self.endpoint = endpoint
-            self.queue = DispatchQueue.init(label: "swift.mqtt.socket.queue")
+            self.queue = DispatchQueue(label: "swift.mqtt.socket.queue",qos: .default,attributes: .concurrent)
             if config.pingEnabled{
                 self.pinging = MQTT.Pinging(self, timeout: config.pingTimeout, interval: .init(config.keepAlive))
             }
         }
         deinit {
             self.pinging?.suspend()
+            self.reader = nil
             self.conn?.forceCancel()
             self.conn = nil
         }
-        private(set) var status:MQTT.Status = .closed(){
+        var status:Status{
+            safe.lock(); defer{ safe.unlock() }
+            return _status
+        }
+        private func setStatus(_ status:Status){
+            safe.lock();  defer{ safe.unlock() }
+            _status = status
+        }
+        private var _status:Status = .closed(){
             didSet{
-                if oldValue != status {
-                    MQTT.Logger.debug("Status changed: \(oldValue) --> \(status)")
-                    switch status{
+                if oldValue != _status {
+                    MQTT.Logger.debug("StatusChanged: \(oldValue) --> \(_status)")
+                    switch _status{
                     case .opened:
                         retrier?.reset()
                         pinging?.resume()
                     case .closed(let reason):
+                        MQTT.Logger.debug("CloseReason:\(reason.debugDescription)")
+                        reader = nil
                         retrier?.reset()
                         pinging?.suspend()
+                        conn?.cancel()
                         conn = nil
                         if let task = self.connTask{
                             switch reason{
-                            case .networkError(let error):
-                                task.done(with:error)
                             case .normalError(let error):
                                 task.done(with: error)
+                            case .networkError(let error):
+                                task.done(with: error)
+                            case .clientClosed(let code):
+                                task.done(with: MQTTError.clientClosed(code))
+                            case .serverClosed(let code):
+                                task.done(with: MQTTError.serverClosed(code))
                             default:
                                 task.done(with:MQTTError.connectFailed())
                             }
                         }
                         connTask = nil
-                        conn?.cancel()
-                        conn = nil
                     case .opening:
                         self.pinging?.suspend()
                     case .closing:
                         self.pinging?.suspend()
                     }
-                    self.onStatus?(status,oldValue)
+                    self.onStatus?(_status,oldValue)
                 }
             }
         }
@@ -91,25 +106,26 @@ extension MQTT{
                 // This is the network telling us we're closed.
                 // We don't need to actually do anything here
                 // other than check our state is ok.
-                self.status = .closed()
+                setStatus(.closed())
             case .failed(let error):
                 // The connection has failed for some reason.
-                self.tryClose(reason: .networkError(error))
+//                self.tryClose(reason: .networkError(error))
                 self.onError?(error)
             case .ready:
-                print("Network ready")
+//                print("Network ready")
                 break
-                // Transitioning to ready means the connection was succeeded. Hooray!
-    //            self.doReady()
+                //Transitioning to ready means the connection was succeeded. Hooray!
+//                self.doReady()
             case .preparing:
                 // This just means connections are being actively established. We have no specific action
                 // here.
-                self.status = .opening
+//                self.status = .opening
+                break
             case .setup:
                 /// inital state
-                self.status = .closed()
+                setStatus(.closed())
             case .waiting(let error):
-                if case .opening = self.status {
+                if case .opening = status {
                     // This means the connection cannot currently be completed. We should notify the pipeline
                     // here, or support this with a channel option or something, but for now for the sake of
                     // demos we will just allow ourselves into this stage.tage.
@@ -117,7 +133,7 @@ extension MQTT{
                 }
                 // In this state we've transitioned into waiting, presumably from active or closing. In this
                 // version of NIO this is an error, but we should aim to support this at some stage.
-                MQTT.Logger.error("connection wating error = \(error)")
+                MQTT.Logger.error("wating error = \(error)")
                 self.tryClose(reason: .networkError(error))
                 self.onError?(error)
             default:
@@ -129,30 +145,24 @@ extension MQTT{
     }
 }
 extension MQTT.Socket{
-    /// Close network connection diirectly
-    private func directClose(reason:MQTT.CloseReason?){
-        switch self.status{
-        case .opened,.opening:
-            if case .ready = self.conn?.state{
-                self.status = .closing
-                self.conn?.cancel()
-            }else{
-                self.status = .closed(reason)
-            }
-        case .closing,.closed:
-            break
-        }
-    }
     /// Internal method run in delegate queue
     /// try close when no need retry
-    private func tryClose(reason:MQTT.CloseReason?){
-        MQTT.Logger.debug("Try close reason:\(reason?.description ?? "")")
+    private func tryClose(reason:MQTT.CloseReason?,function:String=#function,line:Int=#line){
+        safe.lock(); defer{ safe.unlock() }
         if self.retrying{
             return
         }
+        if case .closed = _status{
+            return
+        }
+        if case .closing = _status{
+            return
+        }
+        MQTT.Logger.debug("TryClose[\(function)->\(line)]")
+        if let reason { MQTT.Logger.debug("Reason[\(reason)]") }
         // not retry when reason is nil(close no reason)
         guard let reason else{
-            status = .closed()
+            _status = .closed()
             return
         }
         // posix network unreachable
@@ -160,8 +170,8 @@ extension MQTT.Socket{
         // the monitor just known internet is reachable
         if case .networkError(let err) = reason,case .posix(let posix) = err{
             switch posix{
-            case .ENETUNREACH,.ENETDOWN:
-                self.status = .closed(reason)
+            case .ENETUNREACH, .ENETDOWN: // network unrachable or down
+                _status = .closed(reason)
                 return
             default:
                 break
@@ -169,22 +179,22 @@ extension MQTT.Socket{
         }
         // not retry when network unsatisfied
         if let monitor = self.monitor, monitor.status == .unsatisfied{
-            status = .closed(reason)
+            _status = .closed(reason)
             return
         }
         // not retry when retrier is nil
         guard let retrier = self.retrier else{
-            status = .closed(reason)
+            _status = .closed(reason)
             return
         }
         // not retry when limits or filter
         guard let delay = retrier.retry(when: reason) else{
-            status = .closed(reason)
+            _status = .closed(reason)
             return
         }
         // not retry when no prev conn packet
         guard let connPacket else{
-            status = .closed(reason)
+            _status = .closed(reason)
             return
         }
         // not clean session when auto reconnection
@@ -192,7 +202,8 @@ extension MQTT.Socket{
             self.connPacket = connPacket.copyNotClean()
         }
         self.retrying = true
-        self.status = .opening
+        _status = .opening
+        print("Retry Delay = \(delay)")
         self.queue.asyncAfter(deadline: .now() + delay){
             self.connect()
             self.retrying = false
@@ -208,18 +219,18 @@ extension MQTT.Socket{
             switch packet {
             case let connack as ConnackPacket:
                 try self.processConnack(connack)
-                self.status = .opened
+                self.setStatus(.opened)
                 if connack.sessionPresent {
                     self.resendOnRestart()
                 } else {
-                    self.inflight.clear()
+                    self.$inflight.clear()
                 }
                 return Promise<ConnackPacket>(connack)
             case let auth as AuthPacket:
                 guard let authflow = self.authflow else { throw MQTTError.authflowRequired}
                 return self.processAuth(auth, authflow: authflow).then{ result in
                     if let packet = result as? ConnackPacket{
-                        self.status = .opened
+                        self.setStatus(.opened)
                         return packet
                     }
                     throw MQTTError.unexpectMessage
@@ -228,7 +239,7 @@ extension MQTT.Socket{
                 throw MQTTError.unexpectMessage
             }
         }.catch { error in
-            self.directClose(reason: .normalError(error))
+            self.setStatus(.closed(.normalError(error)))
         }
     }
     private func start(){
@@ -236,21 +247,19 @@ extension MQTT.Socket{
         let conn = NWConnection(to: params.0, using: params.1)
         conn.stateUpdateHandler = self.handle(state:)
         conn.start(queue: queue)
-        self.conn = conn
         self.reader = Reader(self,conn: conn)
         self.reader?.start()
+        self.conn = conn
+        
     }
 }
 extension MQTT.Socket{
     @discardableResult
     private func sendNoWait(_ packet: Packet)->Promise<Void> {
-        guard self.status == .opened else{
-            return .init(MQTTError.noConnection)
-        }
         do {
             MQTT.Logger.debug("SEND: \(packet)")
             var buffer = DataBuffer()
-            try packet.write(version: version, to: &buffer)
+            try packet.write(version: config.version, to: &buffer)
             return self.send(data: buffer.data)
         } catch {
             return .init(error)
@@ -258,9 +267,6 @@ extension MQTT.Socket{
     }
     @discardableResult
     private func sendPacket(_ packet: Packet,timeout:UInt64? = nil)->Promise<Packet> {
-        guard self.status == .opened || packet.type == .CONNECT else{
-            return Promise<Packet>(MQTTError.noConnection)
-        }
         let task = MQTT.Task()
         switch packet.type{
         case .CONNECT: /// send `CONNECT` is active workflow but packetId is 0
@@ -282,7 +288,7 @@ extension MQTT.Socket{
         do {
             MQTT.Logger.debug("SEND: \(packet)")
             var buffer = DataBuffer()
-            try packet.write(version: version, to: &buffer)
+            try packet.write(version: config.version, to: &buffer)
             return send(data: buffer.data).then { _ in
                 return task.start(in: self.queue,timeout:timeout)
             }
@@ -309,26 +315,32 @@ extension MQTT.Socket{
 }
 // MARK: Ping Pong  Retry Monitor
 extension MQTT.Socket{
+    private func monitorConnect(){
+        safe.lock(); defer{ safe.unlock() }
+        switch _status{
+        case .opened,.opening:
+            return
+        default:
+            guard let packet = self.connPacket else{
+                return
+            }
+            // not clean session when auto reconnection
+            if packet.cleanSession{
+                self.connPacket = packet.copyNotClean()
+            }
+            _status = .opening
+            self.connect()
+        }
+    }
     // monitor
     private func newMonitor()->MQTT.Monitor{
         let m = MQTT.Monitor{[weak self] new in
             guard let self else { return }
             switch new{
             case .satisfied:
-                if self.status == .opening || self.status == .opened{
-                    return
-                }
-                guard let packet = self.connPacket else{
-                    return
-                }
-                // not clean session when auto reconnection
-                if packet.cleanSession{
-                    self.connPacket = packet.copyNotClean()
-                }
-                self.status = .opening
-                self.connect()
+                self.monitorConnect()
             case .unsatisfied:
-                self.directClose(reason: .unsatisfied)
+                self.setStatus(.closed(.unsatisfied))
             default:
                 break
             }
@@ -359,7 +371,7 @@ extension MQTT.Socket{
         sendNoWait(PingreqPacket())
     }
     func pingTimeout(){
-        directClose(reason: .pingTimeout)
+        tryClose(reason: .pingTimeout)
     }
     // retrier
     func startRetrier(_ retrier:MQTT.Retrier){
@@ -374,27 +386,26 @@ extension MQTT.Socket{
     /// Respond to PUBREL message by sending PUBCOMP. Do this separate from `ackPublish` as the broker might send
     /// multiple PUBREL messages, if the client is slow to respond
     private func ackPubrel(_ packet: PubackPacket){
-        self.sendNoWait(PubackPacket(id: packet.id, type: .PUBCOMP))
+        self.sendNoWait(packet.pubcomp())
     }
     /// Respond to PUBLISH message
     /// If QoS is `.atMostOnce` then no response is required
     /// If QoS is `.atLeastOnce` then send PUBACK
     /// If QoS is `.exactlyOnce` then send PUBREC, wait for PUBREL and then respond with PUBCOMP (in `ackPubrel`)
-    private func ackPublish(_ pubpkg: PublishPacket) {
-        switch pubpkg.message.qos {
+    private func ackPublish(_ packet: PublishPacket) {
+        switch packet.message.qos {
         case .atMostOnce:
-            self.onMessage?(pubpkg.message)
+            self.onMessage?(packet.message)
         case .atLeastOnce:
-            self.sendNoWait(PubackPacket(id:pubpkg.id,type: .PUBACK)).then { _ in
-                self.onMessage?(pubpkg.message)
+            self.sendNoWait(packet.puback()).then { _ in
+                self.onMessage?(packet.message)
             }
         case .exactlyOnce:
-            let packet = PubackPacket(id:pubpkg.id,type: .PUBREC)
-            self.sendPacket(packet,timeout: self.config.publishTimeout)
+            self.sendPacket(packet.pubrec(),timeout: self.config.publishTimeout)
                 .then { newpkg in
                     /// if we have received the PUBREL we can process the published message. `PUBCOMP` is sent by `ackPubrel`
                     if newpkg.type == .PUBREL {
-                        return pubpkg.message
+                        return packet.message
                     }
                     if  let _ = (newpkg as? PublishPacket)?.message {
                         /// if we receive a publish message while waiting for a `PUBREL` from broker
@@ -409,17 +420,21 @@ extension MQTT.Socket{
                 }.catch { err in
                     if case MQTTError.timeout = err{
                         //Always try again when timeout
-                        return self.sendPacket(packet,timeout: self.config.publishTimeout)
+                        return self.sendPacket(packet.pubrec(),timeout: self.config.publishTimeout)
                     }
                     throw err
                 }
         }
     }
-    func readCompleted(_ reader: Reader) {
-        self.directClose(reason: nil)
-    }
     func reader(_ reader: Reader, didReceive error: any Error) {
-        MQTT.Logger.debug("RECV: \(error)")
+        MQTT.Logger.error("RECV: \(error)")
+        self.clearAllTask(with: error)
+        switch error{
+        case let err as NWError:
+            self.tryClose(reason: .networkError(err))
+        default:
+            self.tryClose(reason: .normalError(error))
+        }
         self.onError?(error)
     }
     func reader(_ reader: Reader, didReceive packet: Packet) {
@@ -430,9 +445,8 @@ extension MQTT.Socket{
             self.pinging?.onPong()
         case .DISCONNECT:
             let disconnect = packet as! DisconnectPacket
-            self.closeAllTask(with: disconnect)
-            
-            self.tryClose(reason: .normalError(MQTTError.serverClosed(disconnect.code)))
+            self.clearAllTask(with: MQTTError.serverClosed(disconnect.code))
+            self.tryClose(reason: .serverClosed(disconnect.code))
         case .PINGREQ:
             self.sendNoWait(PingrespPacket())
         //----------------------------------need callback by packet type----------------------------------
@@ -462,15 +476,19 @@ extension MQTT.Socket{
             MQTT.Logger.error("Unexpected MQTT Message:\(packet)")
         }
     }
-    private func closeAllTask(with packet:DisconnectPacket){
-        self.passiveTasks.forEach { id,task in
-            task.done(with: MQTTError.serverClosed(packet.code))
+    private func clearAllTask(with error:Error){
+        self.$passiveTasks.write { tasks in
+            for ele in tasks{
+                ele.value.done(with: error)
+            }
+            tasks = [:]
         }
-        self.activeTasks.forEach { id,task in
-            task.done(with: MQTTError.serverClosed(packet.code))
+        self.$activeTasks.write { tasks in
+            for ele in tasks{
+                ele.value.done(with: error)
+            }
+            tasks = [:]
         }
-        self.passiveTasks = [:]
-        self.activeTasks = [:]
     }
     private func doneConnTask(with packet:Packet){
         if let task = self.connTask{
@@ -488,44 +506,45 @@ extension MQTT.Socket{
         }
     }
     private func doneActiveTask(with packet:Packet){
-        guard let task = self.activeTasks[packet.id] else{
+        guard let task = self.$activeTasks[packet.id] else{
             /// process packets where no equivalent task was found we only send response to v5 server
             if case .PUBREC = packet.type,case .v5_0 = self.config.version{
-                self.sendNoWait(PubackPacket(id:packet.id,type: .PUBREL, code: .packetIdentifierNotFound))
+                self.sendNoWait(packet.pubrel(code: .packetIdentifierNotFound))
             }
             return
         }
         task.done(with: packet)
-        self.activeTasks.removeValue(forKey: packet.id)
+        self.$activeTasks[packet.id] = nil
     }
     private func donePassiveTask(with packet:Packet){
-        guard let task = self.passiveTasks[packet.id] else{
+        guard let task = self.$passiveTasks[packet.id] else{
             /// process packets where no equivalent task was found we only send response to v5 server
             if case .PUBREL = packet.type,case .v5_0 = self.config.version{
-                self.sendNoWait(PubackPacket(id:packet.id,type: .PUBCOMP, code: .packetIdentifierNotFound))
+                self.sendNoWait(packet.pubcomp(code: .packetIdentifierNotFound))
             }
             return
         }
         task.done(with: packet)
-        self.passiveTasks.removeValue(forKey: packet.id)
+        self.$passiveTasks[packet.id] = nil
     }
 }
 //MARK: Core Implemention for OPEN/AUTH/CLOSE
 extension MQTT.Socket{
     @discardableResult
     func open(_ packet: ConnectPacket,authflow: Authflow? = nil) -> Promise<ConnackPacket> {
+        safe.lock(); defer { safe.unlock() }
         self.connPacket = packet
         self.authflow = authflow
-        switch self.status{
+        switch _status{
         case .opened,.opening:
             return .init(MQTTError.alreadyOpened)
         default:
-            break
+            _status = .opening
+            return connect()
         }
-        self.status = .opening
-        return self.connect()
     }
-    func auth(properties: Properties,authflow: (@Sendable (AuthV5) -> Promise<AuthV5>)? = nil) -> Promise<AuthV5> {
+    func auth(properties: Properties,authflow: Authflow? = nil) -> Promise<Auth> {
+        guard case .opened = status else { return .init(MQTTError.noConnection) }
         let authPacket = AuthPacket(code: .reAuthenticate, properties: properties)
         return self.reAuth(packet: authPacket).then { packet -> Promise<AuthPacket> in
             if packet.code == .success{
@@ -541,10 +560,11 @@ extension MQTT.Socket{
                 return auth
             }
         }.then {
-            AuthV5(code: $0.code, properties: $0.properties)
+            Auth(code: $0.code, properties: $0.properties)
         }
     }
     func close(_ code:ResultCode.Disconnect = .normal,properties:Properties)->Promise<Void>{
+        safe.lock(); defer { safe.unlock() }
         var packet:DisconnectPacket
         switch config.version {
         case .v5_0:
@@ -552,21 +572,21 @@ extension MQTT.Socket{
         case .v3_1_1:
             packet = .init(code: code)
         }
-        switch self.status{
+        switch _status{
         case .closing,.closed:
             return .init(MQTTError.alreadyClosed)
         case .opening:
-            self.directClose(reason: .normalError(MQTTError.clientClosed(code)))
-            return .init()
+            _status = .closed(.normalError(MQTTError.clientClosed(code)))
+            return .init(())
         case .opened:
+            _status = .closing
             return self.sendNoWait(packet).then{ _ in
-                self.directClose(reason: .normalError(MQTTError.clientClosed(code)))
+                self.setStatus(.closed(.normalError(MQTTError.clientClosed(code))))
             }
         }
     }
     
     private func reAuth(packet: AuthPacket) -> Promise<AuthPacket> {
-        guard self.status == .opened else { return .init(MQTTError.noConnection) }
         return self.sendPacket(packet).then { ack in
             if let authack = ack as? AuthPacket{
                 return authack
@@ -578,8 +598,8 @@ extension MQTT.Socket{
     private func processAuth(_ packet: AuthPacket, authflow:@escaping Authflow) -> Promise<Packet> {
         let promise = Promise<Packet>()
         @Sendable func workflow(_ packet: AuthPacket) {
-            authflow(AuthV5(code: packet.code, properties: packet.properties)).then{
-                self.sendPacket(AuthPacket(code: $0.code, properties: $0.properties.properties))
+            authflow(packet.ack()).then{
+                self.sendPacket($0.packet())
             }.then{
                 switch $0 {
                 case let connack as ConnackPacket:
@@ -602,15 +622,15 @@ extension MQTT.Socket{
         return promise
     }
     private func resendOnRestart() {
-        let inflight = self.inflight.packets
-        self.inflight.clear()
+        let inflight = self.inflight
+        self.$inflight.clear()
         inflight.forEach { packet in
             switch packet {
             case let publish as PublishPacket:
-                let newPacket = PublishPacket( id: publish.id, message: publish.message.duplicate())
-                _ = self.publish(packet: newPacket)
-            case let pubRel as PubackPacket:
-                _ = self.pubRel(packet: pubRel)
+                let newpkg = PublishPacket( id: publish.id, message: publish.message.duplicate())
+                _ = self.publish(packet: newpkg)
+            case let newpkg as PubackPacket:
+                _ = self.pubrel(packet: newpkg)
             default:
                 break
             }
@@ -625,8 +645,8 @@ extension MQTT.Socket{
             }
         case .v5_0:
             if connack.returnCode > 0x7F {
-                let code = ResultCode.ConnectV5(rawValue: connack.returnCode) ?? .unrecognisedReason
-                throw MQTTError.connectFailed(.connectv5(code))
+                let code = ResultCode.Connect(rawValue: connack.returnCode) ?? .unrecognisedReason
+                throw MQTTError.connectFailed(.connect(code))
             }
         }
         for property in connack.properties {
@@ -658,23 +678,21 @@ extension MQTT.Socket{
 }
 //MARK: Core Implemention for PUB/SUB
 extension MQTT.Socket {
-    func pubRel(packet: PubackPacket) -> Promise<PubackV5?> {
-        guard self.status == .opened else {
-            return .init(MQTTError.noConnection)
-        }
-        self.inflight.add(packet: packet)
+    func pubrel(packet: PubackPacket) -> Promise<Puback?> {
+        guard case .opened = status else { return .init(MQTTError.noConnection) }
+        self.$inflight.add(packet: packet)
         return self.sendPacket(packet,timeout: self.config.publishTimeout).then{
             guard $0.type != .PUBREC else {
                 throw MQTTError.unexpectMessage
             }
-            self.inflight.remove(id: packet.id)
+            self.$inflight.remove(id: packet.id)
             guard let pubcomp = $0 as? PubackPacket,pubcomp.type == .PUBCOMP else{
                 throw MQTTError.unexpectMessage
             }
             if pubcomp.code.rawValue > 0x7F {
                 throw MQTTError.publishFailed(pubcomp.code)
             }
-            return PubackV5(code: pubcomp.code, properties: pubcomp.properties)
+            return pubcomp.ack()
         }.catch { err in
             if case MQTTError.timeout = err{
                 //Always try again when timeout
@@ -683,8 +701,8 @@ extension MQTT.Socket {
             throw err
         }
     }
-    func publish(packet: PublishPacket) -> Promise<PubackV5?> {
-        guard self.status == .opened else { return .init(MQTTError.noConnection) }
+    func publish(packet: PublishPacket) -> Promise<Puback?> {
+        guard case .opened = status else { return .init(MQTTError.noConnection) }
         // check publish validity
         // check qos against server max qos
         guard self.connParams.maxQoS.rawValue >= packet.message.qos.rawValue else {
@@ -712,9 +730,12 @@ extension MQTT.Socket {
         if packet.message.qos == .atMostOnce {
             return self.sendNoWait(packet).then { nil }
         }
-        self.inflight.add(packet: packet)
+        self.$inflight.add(packet: packet)
+        return senPublish(packet:packet)
+    }
+    private func senPublish(packet:PublishPacket)->Promise<Puback?>{
         return self.sendPacket(packet,timeout: self.config.publishTimeout).then {pkg in
-            self.inflight.remove(id: packet.id)
+            self.$inflight.remove(id: packet.id)
             switch packet.message.qos {
             case .atMostOnce:
                 throw MQTTError.unexpectMessage
@@ -734,23 +755,24 @@ extension MQTT.Socket {
                 throw MQTTError.publishFailed(ack.code)
             }
             return ack
-        }.then {ack  in
-            if ack.type == .PUBREC{
-                return self.pubRel(packet: PubackPacket(id: ack.id,type: .PUBREL))
+        }.then {puback  in
+            if puback.type == .PUBREC{
+                return self.pubrel(packet: PubackPacket(id: puback.id,type: .PUBREL))
             }
-            return Promise<PubackV5?>(PubackV5(code: ack.code, properties: ack.properties))
+            return Promise<Puback?>(puback.ack())
         }.catch { error in
             if case MQTTError.serverClosed(let ack) = error, ack == .malformedPacket{
-                self.inflight.remove(id: packet.id)
+                self.$inflight.remove(id: packet.id)
             }
             if case MQTTError.timeout = error{
                 //Always try again when timeout
-                return self.sendPacket(packet,timeout: self.config.publishTimeout)
+                return self.senPublish(packet:packet)
             }
             throw error
         }
     }
     func subscribe(packet: SubscribePacket) -> Promise<SubackPacket> {
+        guard case .opened = status else { return .init(MQTTError.noConnection) }
         guard packet.subscriptions.count > 0 else {
             return .init(MQTTError.packetError(.atLeastOneTopicRequired))
         }
@@ -762,6 +784,7 @@ extension MQTT.Socket {
         }
     }
     func unsubscribe(packet: UnsubscribePacket) -> Promise<SubackPacket> {
+        guard case .opened = status else { return .init(MQTTError.noConnection) }
         guard packet.subscriptions.count > 0 else {
             return .init(MQTTError.packetError(.atLeastOneTopicRequired))
         }
@@ -788,3 +811,22 @@ extension NWConnection.ContentContext{
     }
 }
 
+extension Safely where Value == [Packet] {
+    func clear(){
+        self.write { values in
+            values = []
+        }
+    }
+    func add(packet: Packet) {
+        self.write { pkgs in
+            pkgs.append(packet)
+        }
+    }
+    /// remove packert
+    func remove(id: UInt16) {
+        self.write { pkgs in
+            guard let first = pkgs.firstIndex(where: { $0.id == id }) else { return }
+            pkgs.remove(at: first)
+        }
+    }
+}
