@@ -109,17 +109,15 @@ extension MQTT{
                 setStatus(.closed())
             case .failed(let error):
                 // The connection has failed for some reason.
-//                self.tryClose(reason: .networkError(error))
+                MQTT.Logger.error("Connection failed error = \(error)")
+                self.clearAllTask(with: error)
+                self.tryClose(reason: .networkError(error))
                 self.onError?(error)
             case .ready:
-//                print("Network ready")
-                break
                 //Transitioning to ready means the connection was succeeded. Hooray!
-//                self.doReady()
+                break
             case .preparing:
-                // This just means connections are being actively established. We have no specific action
-                // here.
-//                self.status = .opening
+                // This just means connections are being actively established. We have no specific action here.
                 break
             case .setup:
                 /// inital state
@@ -133,7 +131,8 @@ extension MQTT{
                 }
                 // In this state we've transitioned into waiting, presumably from active or closing. In this
                 // version of NIO this is an error, but we should aim to support this at some stage.
-                MQTT.Logger.error("wating error = \(error)")
+                MQTT.Logger.error("Connection wating error = \(error)")
+                self.clearAllTask(with: error)
                 self.tryClose(reason: .networkError(error))
                 self.onError?(error)
             default:
@@ -147,7 +146,7 @@ extension MQTT{
 extension MQTT.Socket{
     /// Internal method run in delegate queue
     /// try close when no need retry
-    private func tryClose(reason:MQTT.CloseReason?,function:String=#function,line:Int=#line){
+    private func tryClose(reason:MQTT.CloseReason?){
         safe.lock(); defer{ safe.unlock() }
         if self.retrying{
             return
@@ -158,8 +157,6 @@ extension MQTT.Socket{
         if case .closing = _status{
             return
         }
-        MQTT.Logger.debug("TryClose[\(function)->\(line)]")
-        if let reason { MQTT.Logger.debug("Reason[\(reason)]") }
         // not retry when reason is nil(close no reason)
         guard let reason else{
             _status = .closed()
@@ -203,7 +200,7 @@ extension MQTT.Socket{
         }
         self.retrying = true
         _status = .opening
-        print("Retry Delay = \(delay)")
+        MQTT.Logger.debug("Will reconect after \(delay) seconds")
         self.queue.asyncAfter(deadline: .now() + delay){
             self.connect()
             self.retrying = false
@@ -755,7 +752,7 @@ extension MQTT.Socket {
                 throw MQTTError.publishFailed(ack.code)
             }
             return ack
-        }.then {puback  in
+        }.then { puback  in
             if puback.type == .PUBREC{
                 return self.pubrel(packet: PubackPacket(id: puback.id,type: .PUBREL))
             }
