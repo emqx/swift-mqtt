@@ -37,7 +37,7 @@ public enum MQTTError:Sendable,Hashable, Swift.Error {
     /// We received an unexpected message while connecting
     /// result code may be  `ResultCode.ConnectV3` or `ResultCode.ConnectV3` or `nil`
     case connectFailed(ResultCode? = nil)
-    /// received unexpected message from broker
+    /// The read stream has been completed
     case unexpectMessage
     /// Packet error incomplete packet
     case incompletePacket
@@ -70,6 +70,8 @@ extension MQTTError{
     public enum Decode:Sendable,Hashable{
         /// Read variable length overflow
         case varintOverflow
+        /// Reader stream completed
+        case streamCompleted
         /// Packet received contained invalid tokens
         case unexpectedTokens
         /// got unexpected data length when read

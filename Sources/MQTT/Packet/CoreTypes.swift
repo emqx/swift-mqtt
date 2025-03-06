@@ -97,75 +97,73 @@ public struct Subscribe: Sendable {
     }
 }
 
-/// MQTT Sub ACK
-///
-/// Contains data returned in subscribe ack packets
-public struct Suback: Sendable {
-    public enum ReturnCode: UInt8, Sendable {
-        case grantedQoS0 = 0
-        case grantedQoS1 = 1
-        case grantedQoS2 = 2
-        case failure = 0x80
-    }
-
-    /// MQTT v5 subscribe return codes
-    public let returnCodes: [ReturnCode]
-
-    init(returnCodes: [Suback.ReturnCode]) {
-        self.returnCodes = returnCodes
-    }
-    /// MQTT v5 Sub ACK packet
-    ///
-    /// Contains data returned in subscribe/unsubscribe ack packets
-    public struct V5: Sendable {
-        /// MQTT v5 subscription reason code
-        public let codes: [ResultCode.Suback]
-        /// MQTT v5 properties
-        public let properties: Properties
-
-        init(codes: [ResultCode.Suback], properties: Properties = .init()) {
-            self.codes = codes
-            self.properties = properties
-        }
-    }
-}
-
-
-/// MQTT v5 Connack
-public struct ConnackV5: Sendable {
-    /// connect reason code
-    public let code: ResultCode.ConnectV5
-    /// properties
-    public let properties: Property.Connack
-    /// is using session state from previous session
-    public let sessionPresent: Bool
-}
-
-/// MQTT v5 ACK information. Returned with `PUBACK`, `PUBREL`
-public struct PubackV5: Sendable ,Equatable{
-    /// MQTT v5 reason code
-    public let code: ResultCode.Puback
-    /// MQTT v5 properties
-    public let properties: Property.ACK
-    init(code: ResultCode.Puback = .success, properties: Properties = .init()) {
-        self.code = code
-        self.properties = properties.ack()
-    }
-}
-
 /// MQTT V5 Auth packet
 ///
 /// An AUTH packet is sent from Client to Server or Server to Client as
 /// part of an extended authentication exchange, such as challenge / response
 /// authentication
-public struct AuthV5: Sendable {
+public struct Auth: Sendable {
     /// MQTT v5 authentication reason code
     public let code: ResultCode.Auth
-    /// MQTT v5 properties
-    public let properties: Property.Auth
-
+    /// MQTT v5 properties. It will be empty in v3
+    public let properties: Property.Auth?
     init(code: ResultCode.Auth, properties: Properties) {
         self.code = code
-        self.properties = properties.auth()
+        self.properties = properties.isEmpty ? nil : properties.auth()
+    }
+    func packet()->AuthPacket{
+        .init(code: code, properties: properties?.properties ?? [])
     }
 }
+/// MQTT v5 ACK information. Returned with `PUBACK`, `PUBREL`
+public struct Puback: Sendable ,Equatable{
+    /// MQTT v5 reason code
+    public let code: ResultCode.Puback
+    /// MQTT v5 properties. It will be empty in v3
+    public let properties: Property.ACK?
+    init(code: ResultCode.Puback = .success, properties: Properties = .init()) {
+        self.code = code
+        self.properties = properties.isEmpty ? nil : properties.ack()
+    }
+}
+/// Contains data returned in subscribe ack packets
+public struct Suback: Sendable {
+    /// MQTT v3 and  v5 subscription reason code
+    public let codes: [ResultCode.Suback]
+    /// MQTT v5 properties. It will be empty in v3
+    public let properties: Property.ACK?
+    init(codes: [ResultCode.Suback], properties: Properties = .init()) {
+        self.codes = codes
+        self.properties = properties.isEmpty ? nil : properties.ack()
+    }
+}
+/// Contains data returned in subscribe ack packets
+public struct Unsuback: Sendable {
+    /// MQTT v3 and  v5 subscription reason code
+    public let codes: [ResultCode.Unsuback]
+    /// MQTT v5 properties. It will be empty in v3
+    public let properties: Property.ACK?
+    init(codes: [ResultCode.Unsuback], properties: Properties = .init()) {
+        self.codes = codes
+        self.properties = properties.isEmpty ? nil : properties.ack()
+    }
+}
+
+/// MQTT v5 Connack
+public struct Connack: Sendable {
+    /// connect reason code
+    public let code: ResultCode.Connect
+    /// MQTT v5 properties. It will be empty in v3
+    public let properties: Property.Connack?
+    /// is using session state from previous session
+    public let sessionPresent: Bool
+    init(code: ResultCode.Connect, properties: Properties, sessionPresent: Bool) {
+        self.code = code
+        self.properties = properties.connack()
+        self.sessionPresent = sessionPresent
+    }
+}
+
+
+
+

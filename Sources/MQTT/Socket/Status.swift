@@ -11,6 +11,9 @@ import Network
 extension MQTT{
     /// state machine
     public enum Status:Sendable,Hashable,CustomStringConvertible{
+        public static func == (lhs: MQTT.Status, rhs: MQTT.Status) -> Bool {
+            lhs.hashValue == rhs.hashValue
+        }
         case opened
         case opening
         case closing
@@ -20,15 +23,24 @@ extension MQTT{
             case .opening: return "opening"
             case .closing: return "closing"
             case .opened:  return "opened"
-            case .closed:  return "closed"
+            case .closed: return "closed"
+            }
+        }
+        public func hash(into hasher: inout Hasher) {
+            switch self {
+            case .opened:
+                0.hash(into: &hasher)
+            case .opening:
+                1.hash(into: &hasher)
+            case .closing:
+                2.hash(into: &hasher)
+            case .closed:
+                3.hash(into: &hasher)
             }
         }
     }
     ///  close reason
-    public enum CloseReason:Sendable,Hashable,CustomStringConvertible{
-        public static func == (lhs: MQTT.CloseReason, rhs: MQTT.CloseReason) -> Bool {
-            lhs.hashValue == rhs.hashValue
-        }
+    public enum CloseReason:Sendable,CustomStringConvertible{
         /// close when ping timeout
         case pingTimeout
         /// auto close by network monitor when network unsatisfied
@@ -44,37 +56,12 @@ extension MQTT{
         case clientClosed(ResultCode.Disconnect)
         public var description: String{
             switch self{
-            case .unsatisfied: return "network unsatisfied"
-            case .pingTimeout: return "ping timeout"
-            case .normalError(let error): return "normal error \(error)"
-            case .networkError(let error): return "network error \(error)"
-            case .serverClosed(let code): return "server closed code: \(code)"
-            case .clientClosed(let code): return "client closed code: \(code)"
-            }
-        }
-        public func hash(into hasher: inout Hasher) {
-            switch self {
-            case .pingTimeout:
-                0.hash(into: &hasher)
-            case .unsatisfied:
-                1.hash(into: &hasher)
-            case .normalError(let error):
-                2.hash(into: &hasher)
-                switch error{
-                case let mqttError as MQTTError:
-                    mqttError.hash(into: &hasher)
-                default:
-                    (error as NSError).code.hash(into: &hasher)
-                }
-            case .networkError(let nwError):
-                3.hash(into: &hasher)
-                nwError.addHash(into: &hasher)
-            case .serverClosed(let code):
-                4.hash(into: &hasher)
-                code.hash(into: &hasher)
-            case .clientClosed(let code):
-                5.hash(into: &hasher)
-                code.hash(into: &hasher)
+            case .unsatisfied: return "Unsatisfied"
+            case .pingTimeout: return "PingTimeout"
+            case .normalError(let error): return "Normal(\(error))"
+            case .networkError(let error): return "Network(\(error))"
+            case .serverClosed(let code): return "ServerClosed(\(code))"
+            case .clientClosed(let code): return "ClientClosed(\(code))"
             }
         }
     }
@@ -166,20 +153,4 @@ extension MQTT{
 //    errSecAuthFailed                            = -25293,  /* The user name or passphrase you entered is not correct. */
 //};
 
-extension NWError{
-    func addHash(into hasher: inout Hasher) {
-        switch self {
-        case .posix(let pOSIXErrorCode):
-            0.hash(into: &hasher)
-            pOSIXErrorCode.hash(into: &hasher)
-        case .dns(let dNSServiceErrorType):
-            1.hash(into: &hasher)
-            dNSServiceErrorType.hash(into: &hasher)
-        case .tls(let oSStatus):
-            2.hash(into: &hasher)
-            oSStatus.hash(into: &hasher)
-        default:
-            (-1).hash(into: &hasher)
-        }
-    }
-}
+

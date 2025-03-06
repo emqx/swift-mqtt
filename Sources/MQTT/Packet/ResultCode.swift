@@ -136,7 +136,7 @@ import Foundation
 public enum ResultCode:Sendable,Hashable{
     case auth(Auth)
     case connectv3(ConnectV3)
-    case connectv5(ConnectV5)
+    case connect(Connect)
     case disconnect(Disconnect)
     case puback(Puback)
     case suback(Suback)
@@ -169,7 +169,8 @@ extension ResultCode{
         /// Reason code was unrecognised
         case unrecognisedReason = 0xFF
     }
-    public enum ConnectV5: UInt8,Sendable,Hashable{
+    /// Value returned in connection of v5
+    public enum Connect: UInt8,Sendable,Hashable{
         /// connection was accepted
         case accepted = 0x00
         /// Unaccpeted and the Server either does not wish to reveal the reason or none of the other Reason Codes apply.
@@ -306,7 +307,6 @@ extension ResultCode{
         /// Reason code was unrecognised
         case unrecognisedReason = 0xFF
     }
-
     public enum Suback: UInt8,Sendable,Hashable {
         /// QoS0 is available
         case grantedQoS0 = 0x00
@@ -336,6 +336,7 @@ extension ResultCode{
     }
 
     public enum Unsuback: UInt8,Sendable,Hashable {
+        /// unsubscripti sucessfully
         case success = 0x00
         /// No matching Topic Filter is being used by the Client.
         case noSubscriptionExisted = 0x11

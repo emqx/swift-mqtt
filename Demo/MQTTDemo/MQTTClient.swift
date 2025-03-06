@@ -62,14 +62,12 @@ class Observer{
 class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
     let observer = Observer()
     init() {
-        let clientID = UUID().uuidString
-        super.init(clientID, endpoint: .quic(host: "172.16.2.7",tls: .trustAll()))
+        super.init(UUID().uuidString, endpoint: .quic(host: "172.16.2.7",tls: .trustAll()))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
         self.config.username = "test"
         self.config.password = "test"
         self.config.pingEnabled = true
-        
         /// start network monitor
         self.startMonitor()
         /// start auto reconnecting
