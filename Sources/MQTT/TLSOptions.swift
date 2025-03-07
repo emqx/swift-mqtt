@@ -54,6 +54,18 @@ public struct TLSOptions:Sendable{
         if let serverName{
             sec_protocol_options_set_tls_server_name(opt_t, serverName)
         }
+        
+        sec_protocol_options_set_tls_resumption_enabled(opt_t,true)
+        sec_protocol_options_set_tls_tickets_enabled(opt_t, true)
+        sec_protocol_options_set_tls_false_start_enabled(opt_t,true)
+        
+        /// psk
+//        sec_protocol_options_add_pre_shared_key(opt_t, key, T##psk_identity: dispatch_data_t##dispatch_data_t)
+//        sec_protocol_options_set_tls_pre_shared_key_identity_hint(opt_t, )
+//        sec_protocol_options_set_pre_shared_key_selection_block(opt_t, { meta, data, complete in
+//            complete(data)
+//        }, queue)
+        
         if let identity = credential?.identity{
             sec_protocol_options_set_local_identity(opt_t, identity)
             sec_protocol_options_set_challenge_block(opt_t, {
@@ -192,6 +204,7 @@ extension MQTT{
                     if config.pingEnabled{
                         quic.idleTimeout = Int(config.keepAlive) * 1500 // 1.5x keepAlive time
                     }
+                    
                     tls?.update_sec_options(quic.securityProtocolOptions)
                     let params = NWParameters(quic: quic)
                     params.allowFastOpen = true // allow fast open

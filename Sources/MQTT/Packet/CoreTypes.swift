@@ -42,18 +42,30 @@ extension MQTT{
     }
 }
 
-
-/// MQTT `SUBSCRIBE` packet parameters.
+/// MQTT v5 `SUBSCRIBE` packet parameters.
 public struct Subscribe: Sendable {
     /// Topic filter to subscribe to.
     public let topicFilter: String
-
     /// Quality of Service for subscription.
     public let qos: MQTTQoS
-
-    public init(topicFilter: String, qos: MQTTQoS) {
+    /// Don't forward message published by this client
+    public let noLocal: Bool
+    /// Keep retain flag message was published with
+    public let retainAsPublished: Bool
+    /// Retain handing
+    public let retainHandling: RetainHandling
+    public init(
+        topicFilter: String,
+        qos: MQTTQoS,
+        noLocal: Bool = false,
+        retainAsPublished: Bool = true,
+        retainHandling: RetainHandling = .sendIfNew
+    ) {
         self.qos = qos
         self.topicFilter = topicFilter
+        self.noLocal = noLocal
+        self.retainAsPublished = retainAsPublished
+        self.retainHandling = retainHandling
     }
     /// Retain handling options
     public enum RetainHandling: UInt8, Sendable {
@@ -64,38 +76,19 @@ public struct Subscribe: Sendable {
         /// do not send retain message
         case doNotSend = 2
     }
-    /// MQTT v5 `SUBSCRIBE` packet parameters.
-    public struct V5: Sendable {
+    /// MQTT v3 `SUBSCRIBE` packet parameters.
+    public struct V3: Sendable {
         /// Topic filter to subscribe to.
         public let topicFilter: String
-
         /// Quality of Service for subscription.
         public let qos: MQTTQoS
-
-        /// Don't forward message published by this client
-        public let noLocal: Bool
-
-        /// Keep retain flag message was published with
-        public let retainAsPublished: Bool
-
-        /// Retain handing
-        public let retainHandling: RetainHandling
-
-        public init(
-            topicFilter: String,
-            qos: MQTTQoS,
-            noLocal: Bool = false,
-            retainAsPublished: Bool = true,
-            retainHandling: RetainHandling = .sendIfNew
-        ) {
+        public init(topicFilter: String, qos: MQTTQoS) {
             self.qos = qos
             self.topicFilter = topicFilter
-            self.noLocal = noLocal
-            self.retainAsPublished = retainAsPublished
-            self.retainHandling = retainHandling
         }
     }
 }
+
 
 /// MQTT V5 Auth packet
 ///

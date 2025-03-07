@@ -62,33 +62,37 @@ class Observer{
 class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
     let observer = Observer()
     init() {
-        super.init(UUID().uuidString, endpoint: .quic(host: "172.16.2.7",tls: .trustAll()))
+        super.init(UUID().uuidString, endpoint: .tls(host: "172.16.2.7",tls: .trustAll()))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
         self.config.username = "test"
         self.config.password = "test"
         self.config.pingEnabled = true
+        self.delegateQueue = .main
         /// start network monitor
         self.startMonitor()
         /// start auto reconnecting
         self.startRetrier{reason in
-            guard case .normalError(let error) = reason,
-                    case MQTTError.serverClosed(let code) = error else{
+            switch reason{
+            case .serverClosed(let code):
+                switch code{
+                case .serverBusy,.connectionRateExceeded:// don't retry when server is busy
+                    return true
+                default:
+                    return false
+                }
+            default:
                 return false
             }
-            if code == .serverBusy || code == .connectionRateExceeded{
-                return true
-            }
-            return false
         }
         /// eg
         /// set simple delegate
         self.delegate = self
         /// eg.
         /// add multiple observer.
-        self.addObserver(observer, of: .status, selector: #selector(Observer.statusChanged(_:)))
-        self.addObserver(observer, of: .message, selector: #selector(Observer.recivedMessage(_:)))
-        self.addObserver(observer, of: .error, selector: #selector(Observer.recivedError(_:)))
+        self.addObserver(observer, for: .status, selector: #selector(Observer.statusChanged(_:)))
+        self.addObserver(observer, for: .message, selector: #selector(Observer.recivedMessage(_:)))
+        self.addObserver(observer, for: .error, selector: #selector(Observer.recivedError(_:)))
     }
     
 }

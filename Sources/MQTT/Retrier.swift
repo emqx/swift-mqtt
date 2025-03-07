@@ -109,11 +109,11 @@ extension MQTT{
         /// current pinging time interval
         public let interval:TimeInterval
         /// mqtt client
-        private weak var delegate:Socket!
+        private weak var delegate:Client!
         /// task
         private var task:DelayTask? = nil
         private var pongRecived:Bool = false
-        init(_ delegate:Socket,timeout:TimeInterval,interval:TimeInterval) {
+        init(_ delegate:Client,timeout:TimeInterval,interval:TimeInterval) {
             self.delegate = delegate
             self.timeout = timeout
             self.interval = interval
