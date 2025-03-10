@@ -3,6 +3,15 @@
 - An MQTT Client over TCP and QUIC protocol
 - QUIC protocol mark with `@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)`
 
+## Why
+- We already have some mqtt clients available like [mqtt-nio](https://github.com/swift-server-community/mqtt-nio.git), [CocoaMQTT](https://github.com/emqx/CocoaMQTT.git) and so on, why do we write another one?
+
+- [mqtt-nio](https://github.com/swift-server-community/mqtt-nio.git) is built on [swift-nio](https://github.com/apple/swift-nio.git), and `swift-nio` needs to consider compatibility with platforms other than iOS, so the code dependency is a little too onerous for the iOS client. Although `swift-nio` can make the underlying implementation of `swift-nio` directly provided by the iOS Network framework through the introduction of [swift-nio-transport-services](https://github.com/apple/swift-nio-transport-services.git), it is also difficult to accept.
+
+- [CocoaMQTT](https://github.com/emqx/CocoaMQTT.git) is built on  [CocoaAsyncSocket](https://github.com/robbiehanson/CocoaAsyncSocket.git) that is too old and doesn't support the `QUIC` protocol.
+
+- `swift-mqtt` is a lightweight mqtt client focused on the iOS platform and provides `QUIC` protocol support. Of course, many of these implementations also refer to the previous two
+
 ## Requirements
 
 - iOS 13.0+ | macOS 10.15+ | tvOS 13.0+ | watchOS 6.0+
@@ -15,13 +24,13 @@
 You can use [The Swift Package Manager](https://swift.org/package-manager) to install `swift-mqtt` by adding the proper description to your `Package.swift` file:
 
 ```swift
-// swift-tools-version:6.0
+// swift-tools-version:5.8
 import PackageDescription
 
 let package = Package(
     name: "YOUR_PROJECT_NAME",
     dependencies: [
-        .package(url: "https://github.com/emqx/swift-mqtt.git", from: "0.2.0"),
+        .package(url: "https://github.com/emqx/swift-mqtt.git", from: "0.2.1"),
     ]
 )
 ```
