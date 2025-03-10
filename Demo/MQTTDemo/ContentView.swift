@@ -15,8 +15,8 @@ class State:ObservableObject{
         client.removeObserver(self)
     }
     init() {
-        client.addObserver(self, of: .status, selector: #selector(statusChanged(_:)))
-        client.addObserver(self, of: .message, selector: #selector(recivedMessage(_:)))
+        client.addObserver(self, for: .status, selector: #selector(statusChanged(_:)))
+        client.addObserver(self, for: .message, selector: #selector(recivedMessage(_:)))
     }
     @objc func statusChanged(_ notify:Notification){
         guard let info = notify.mqttStatus() else{

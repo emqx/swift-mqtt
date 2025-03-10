@@ -289,8 +289,7 @@ struct SubscribePacket: Packet {
     var type: PacketType { .SUBSCRIBE }
     var description: String { "SUBSCRIBE" }
     let properties: Properties?
-    let subscriptions: [Subscribe.V5]
-
+    let subscriptions: [Subscribe]
     func write(version: MQTT.Version, to byteBuffer: inout DataBuffer) throws {
         writeFixedHeader(packetType: .SUBSCRIBE, size: self.packetSize(version: version), to: &byteBuffer)
         // write variable header

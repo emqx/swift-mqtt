@@ -1,7 +1,33 @@
 # swift-mqtt
+![Platform](https://img.shields.io/badge/platforms-iOS%208.0%20%7C%20macOS%2010.10%20%7C%20tvOS%209.0%20%7C%20watchOS%203.0-F28D00.svg)
 - An MQTT Client over TCP and QUIC protocol
 - QUIC protocol mark with `@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)`
-### Usage
+
+## Requirements
+
+- iOS 13.0+ | macOS 10.15+ | tvOS 13.0+ | watchOS 6.0+
+- Xcode 8
+
+## Integration
+
+#### Swift Package Manager
+
+You can use [The Swift Package Manager](https://swift.org/package-manager) to install `swift-mqtt` by adding the proper description to your `Package.swift` file:
+
+```swift
+// swift-tools-version:6.0
+import PackageDescription
+
+let package = Package(
+    name: "YOUR_PROJECT_NAME",
+    dependencies: [
+        .package(url: "https://github.com/emqx/swift-mqtt.git", from: "0.2.0"),
+    ]
+)
+```
+
+
+## Usage
 ```swift
 import MQTT
 import Foundation
@@ -45,7 +71,7 @@ class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
         /// start auto reconnecting
         self.startRetrier{reason in
             switch reason{
-            case .serverClosed(let code, _):
+            case .serverClose(let code):
                 switch code{
                 case .serverBusy,.connectionRateExceeded:// don't retry when server is busy
                     return true

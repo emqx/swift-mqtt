@@ -8,29 +8,18 @@
 import Foundation
 
 /// MQTT v5.0 properties. A property consists of a identifier and a value
-
 public typealias Properties = [Property]
 
 extension Properties{
-    ///
     /// `PUBACK` `SUBACK` `PUBREL` `PUBREC` `PUBCOMP` `UNSUBACK` properties
-    ///
     public func ack()->Property.ACK{ .init(self) }
-    ///
     /// `AUTH` packet properties
-    ///
     public func auth()->Property.Auth{ .init(self) }
-    ///
     /// `CONNECT` packet properties
-    ///
     public func connect()->Property.Connect{ .init(self) }
-    ///
     /// `CONNACK` properties
-    ///
     public func connack()->Property.Connack{ .init(self) }
-    ///
     /// `PUBLISH` packet properties
-    ///
     public func publish()->Property.Publish{ .init(self) }
     
     func write(to byteBuffer: inout DataBuffer) throws {
@@ -58,67 +47,65 @@ extension Properties{
     }
 }
 
-
 /// MQTT v5.0 properties. A property consists of a identifier and a value
-
 public enum Property: Equatable, Sendable {
-    /// Payload format: 0 = bytes, 1 = UTF8 string (available for PUBLISH)
+    /// Payload format: 0 = bytes, 1 = UTF8 string (available for `PUBLISH`)
     case payloadFormat(UInt8)
-    /// Message expiry indicates the lifetime of the message (available for PUBLISH)
+    /// Message expiry indicates the lifetime of the message (available for `PUBLISH`)
     case messageExpiry(UInt32)
-    /// String describing the content of the message eg "application/json" (available for PUBLISH)
+    /// String describing the content of the message eg "application/json" (available for `PUBLISH`)
     case contentType(String)
-    /// Response topic used in request/response interactions (available for PUBLISH)
+    /// Response topic used in request/response interactions (available for `PUBLISH`)
     case responseTopic(String)
-    /// Correlation data used to id a request/response in request/response interactions (available for PUBLISH)
+    /// Correlation data used to id a request/response in request/response interactions (available for `PUBLISH`)
     case correlationData(Data)
-    /// Subscription identifier set in SUBSCRIBE packet and included in related PUBLISH packet
+    /// Subscription identifier set in SUBSCRIBE packet and included in related `PUBLISH` packet
     /// (available for PUBLISH, SUBSCRIBE)
     case subscriptionIdentifier(Int)
-    /// Interval before session expires (available for CONNECT, CONNACK, DISCONNECT)
+    /// Interval before session expires (available for `CONNECT`, `CONNACK`, `DISCONNECT`)
     case sessionExpiryInterval(UInt32)
-    /// Client identifier assigned to client if they didn't provide one (available for CONNACK)
+    /// Client identifier assigned to client if they didn't provide one (available for `CONNACK`)
     case assignedClientIdentifier(String)
-    /// Indication to client on how long server will keep connection without activity (available for CONNACK)
+    /// Indication to client on how long server will keep connection without activity (available for `CONNACK`)
     case serverKeepAlive(UInt16)
-    /// String indicating the authentication method to use (available for CONNECT, CONNACK, AUTH)
+    /// String indicating the authentication method to use (available for `CONNECT`, `CONNACK`, `AUTH`)
     case authenticationMethod(String)
-    /// Data used in authentication (available for CONNECT, CONNACK, AUTH)
+    /// Data used in authentication (available for `CONNECT`, `CONNACK`, `AUTH`)
     case authenticationData(Data)
-    /// Request that server sends a reason string in its CONNACK or DISCONNECT packets (available for CONNECT)
+    /// Request that server sends a reason string in its `CONNACK` or `DISCONNECT` packets (available for `CONNECT`)
     case requestProblemInformation(UInt8)
-    /// Interval to wait before publishing connect will message (available for CONNECT will)
+    /// Interval to wait before publishing connect will message (available for `CONNECT` will)
     case willDelayInterval(UInt32)
-    /// Request response information from server (available for CONNECT)
+    /// Request response information from server (available for `CONNECT`)
     case requestResponseInformation(UInt8)
     /// Response information from server. Commonly used to pass a globally unique portion
-    /// of the topic tree for this client (available for CONNACK)
+    /// of the topic tree for this client (available for `CONNACK`)
     case responseInformation(String)
-    /// Server uses serverReference in CONNACK to indicate to either use another server or that the server has moved
+    /// Server uses serverReference in `CONNACK` to indicate to either use another server or that the server has moved
     /// (available for CONNACK)
     case serverReference(String)
-    /// String representing the reason associated with this response (available for CONNACK,
-    /// PUBACK, PUBREC, PUBREL, PUBCOMP, SUBACK, UNSUBACK, DISCONNECT, AUTH)
+    /// String representing the reason associated with this response (available for `CONNACK`,
+    /// `PUBACK`, `PUBREC`, `PUBREL`, `PUBCOMP`, `SUBACK`, `UNSUBACK`, `DISCONNECT`, `AUTH`)
     case reasonString(String)
     /// Maximum number of PUBLISH, PUBREL messages that can be sent without receiving a response (available for CONNECT, CONNACK)
     case receiveMaximum(UInt16)
-    /// Maximum number for topic alias (available for CONNECT, CONNACK)
+    /// Maximum number for topic alias (available for `CONNECT`, `CONNACK`)
     case topicAliasMaximum(UInt16)
-    /// Topic alias. Use instead of full topic name to reduce packet size (available for PUBLISH)
+    /// Topic alias. Use instead of full topic name to reduce packet size (available for `PUBLISH`)
     case topicAlias(UInt16)
-    /// Maximum QoS supported by server (available for CONNACK)
+    /// Maximum QoS supported by server (available for `CONNACK`)
     case maximumQoS(MQTTQoS)
-    /// Does server support retained publish packets (available for CONNACK)
+    /// Does server support retained publish packets (available for `CONNACK`)
     case retainAvailable(UInt8)
     /// User property, key and value (available for all packets)
     case userProperty(String, String)
-    /// Maximum packet size supported (available for CONNECT, CONNACK)
+    /// Maximum packet size supported (available for `CONNECT`, `CONNACK`)
     case maximumPacketSize(UInt32)
-    /// Does server support wildcard subscription (available for CONNACK)
+    /// Does server support wildcard subscription (available for `CONNACK`)
     case wildcardSubscriptionAvailable(UInt8)
-    /// Does server support subscription identifiers (available for CONNACK)
+    /// Does server support subscription identifiers (available for `CONNACK`)
     case subscriptionIdentifierAvailable(UInt8)
-    /// Does server support shared subscriptions (available for CONNACK)
+    /// Does server support shared subscriptions (available for `CONNACK`)
     case sharedSubscriptionAvailable(UInt8)
 }
 
@@ -367,9 +354,8 @@ extension Property {
 }
 
 extension Property{
-    ///
     /// CONNACK properties
-    ///
+    /// - SeeAlso; `enum Property` for parameters detail
     public struct Connack:Sendable,Equatable{
         public var sessionExpiryInterval: UInt32?
         public var receiveMaximum: UInt16?
@@ -437,6 +423,8 @@ extension Property{
     }
 }
 extension Property{
+    /// `PUBACK` `SUBACK` `PUBREL` `PUBREC` `PUBCOMP` `UNSUBACK` properties
+    /// - SeeAlso; `enum Property` for parameters detail
     public struct ACK:Sendable,Equatable{
         public var reasonString: String?
         public var userProperty: [String: String]?
@@ -459,6 +447,8 @@ extension Property{
     }
 }
 extension Property{
+    /// `PUBLISH` packet properties
+    /// - SeeAlso; `enum Property` for parameters detail
     public struct Publish:Sendable,Equatable{
         public var payloadFormat: UInt8?
         public var messageExpiry: UInt32?
@@ -531,7 +521,8 @@ extension Property{
     
 }
 extension Property{
-    
+    /// `AUTH` packet properties
+    /// - SeeAlso; `enum Property` for parameters detail
     public struct Auth:Sendable,Equatable{
         public var authenticationMethod: String?
         public var authenticationData: Data?
@@ -579,6 +570,8 @@ extension Property{
     }
 }
 extension Property{
+    /// `CONNECT` packet properties
+    /// - SeeAlso; `enum Property` for parameters detail
     public struct Connect:Sendable,Equatable{
         public var sessionExpiryInterval: UInt32?
         public var receiveMaximum: UInt16?
