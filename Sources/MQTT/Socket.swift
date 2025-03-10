@@ -9,8 +9,8 @@ import Foundation
 import Network
 
 protocol SocketDelegate:AnyObject{
-    func socket(_ socket:Socket,didReceiveError error:Error)
-    func socket(_ socket:Socket,didReceivePacket packet:Packet)
+    func socket(_ socket:Socket,didReceive error:Error)
+    func socket(_ socket:Socket,didReceive packet:Packet)
 }
 class Socket:@unchecked Sendable{
     let endpoint:MQTT.Endpoint
@@ -18,16 +18,13 @@ class Socket:@unchecked Sendable{
     private var header:UInt8 = 0
     private var length:Int = 0
     private var multiply = 1
-    private var version:MQTT.Version
     private let config:MQTT.Config
     private var cancelTask:Promise<Void>?
-    weak var delegate:SocketDelegate!
-    init(endpoint:MQTT.Endpoint,version:MQTT.Version,config:MQTT.Config){
+    weak var delegate:SocketDelegate?
+    init(endpoint:MQTT.Endpoint,config:MQTT.Config){
         self.endpoint = endpoint
-        self.version = version
         self.config = config
     }
-    
     func start(in queue:DispatchQueue){
         let params = endpoint.params(config: config)
         let conn = NWConnection(to: params.0, using: params.1)
@@ -41,10 +38,9 @@ class Socket:@unchecked Sendable{
             self.readHeader()
         }
     }
-    
     func send(data:Data)->Promise<Void>{
         guard let conn = self.conn else{
-            return .init(MQTTError.noConnection)
+            return .init(MQTTError.unconnected)
         }
         let promise = Promise<Void>()
         conn.send(content: data,contentContext: .default(timeout: config.writingTimeout), completion: .contentProcessed({ error in
@@ -81,7 +77,7 @@ class Socket:@unchecked Sendable{
             self.conn = nil
         case .failed(let error):
             // The connection has failed for some reason.
-            self.delegate.socket(self, didReceiveError: error)
+            self.delegate?.socket(self, didReceive: error)
         case .ready:
             break
         case .preparing:
@@ -97,7 +93,7 @@ class Socket:@unchecked Sendable{
             // But let's not worry about that right now. so noting happend
             // In this state we've transitioned into waiting, presumably from active or closing. In this
             // version of NIO this is an error, but we should aim to support this at some stage.
-            self.delegate.socket(self, didReceiveError: error)
+            self.delegate?.socket(self, didReceive: error)
         default:
             // This clause is here to help the compiler out: it's otherwise not able to
             // actually validate that the switch is exhaustive. Trust me, it is.
@@ -119,7 +115,7 @@ class Socket:@unchecked Sendable{
             if byte & 0x80 != 0{
                 let result = self.multiply.multipliedReportingOverflow(by: 0x80)
                 if result.overflow {
-                    self.delegate.socket(self, didReceiveError: MQTTError.decodeError(.varintOverflow))
+                    self.delegate?.socket(self, didReceive: MQTTError.decodeError(.varintOverflow))
                     return
                 }
                 self.multiply = result.partialValue
@@ -139,15 +135,15 @@ class Socket:@unchecked Sendable{
     }
     private func dispath(data:Data){
         guard let type = PacketType(rawValue: header) ?? PacketType(rawValue: header & 0xF0) else {
-            self.delegate.socket(self, didReceiveError: MQTTError.decodeError(.unrecognisedPacketType))
+            self.delegate?.socket(self, didReceive: MQTTError.decodeError(.unrecognisedPacketType))
 
             return
         }
         let incoming:IncomingPacket = .init(type: type, flags: self.header & 0xF, remainingData: .init(data: data))
         do {
-            self.delegate.socket(self, didReceivePacket: try incoming.packet(with: self.version))
+            self.delegate?.socket(self, didReceive: try incoming.packet(with: self.config.version))
         } catch {
-            self.delegate.socket(self, didReceiveError: error)
+            self.delegate?.socket(self, didReceive: error)
         }
         self.readHeader()
     }
@@ -157,15 +153,15 @@ class Socket:@unchecked Sendable{
                 return
             }
             if isComplete{
-                self.delegate.socket(self, didReceiveError: MQTTError.decodeError(.streamCompleted))
+                self.delegate?.socket(self, didReceive: MQTTError.decodeError(.streamCompleted))
                 return
             }
             if let error{
-                self.delegate.socket(self, didReceiveError: error)
+                self.delegate?.socket(self, didReceive: error)
                 return
             }
             guard let data = content,data.count == length else{
-                self.delegate.socket(self, didReceiveError: MQTTError.decodeError(.unexpectedDataLength))
+                self.delegate?.socket(self, didReceive: MQTTError.decodeError(.unexpectedDataLength))
 
                 return
             }
@@ -176,24 +172,24 @@ class Socket:@unchecked Sendable{
         conn?.receiveMessage {[weak self] content, contentContext, isComplete, error in
             guard let self else{ return }
             if isComplete{
-                self.delegate.socket(self, didReceiveError: MQTTError.decodeError(.streamCompleted))
+                self.delegate?.socket(self, didReceive: MQTTError.decodeError(.streamCompleted))
                 return
             }
             if let error{
-                self.delegate.socket(self, didReceiveError: error)
+                self.delegate?.socket(self, didReceive: error)
                 return
             }
             guard let data = content else{
-                self.delegate.socket(self, didReceiveError: MQTTError.decodeError(.unexpectedDataLength))
+                self.delegate?.socket(self, didReceive: MQTTError.decodeError(.unexpectedDataLength))
                 return
             }
             do {
                 var buffer = DataBuffer(data: data)
                 let incoming = try IncomingPacket.read(from: &buffer)
-                let message = try incoming.packet(with: self.version)
-                self.delegate.socket(self, didReceivePacket: message)
+                let message = try incoming.packet(with: self.config.version)
+                self.delegate?.socket(self, didReceive: message)
             }catch{
-                self.delegate.socket(self, didReceiveError: error)
+                self.delegate?.socket(self, didReceive: error)
             }
         }
     }
@@ -204,7 +200,7 @@ class Socket:@unchecked Sendable{
     }
 }
 extension NWConnection.ContentContext{
-    static func `default`(timeout:UInt64)->NWConnection.ContentContext{
-        return .init(identifier: "swift-mqtt",expiration: timeout)
+    static func `default`(timeout:TimeInterval)->NWConnection.ContentContext{
+        return .init(identifier: "swift-mqtt",expiration: .init(timeout*1000))
     }
 }

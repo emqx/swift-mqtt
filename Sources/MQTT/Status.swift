@@ -45,23 +45,35 @@ extension MQTT{
         case pingTimeout
         /// auto close by network monitor when network unsatisfied
         case unsatisfied
-        /// Errors other than `networkError()` ,`serverClosed()` and `clientClosed()`
-        /// When `MQTTError` exclude `serverClosed` `clientClosed`
-        case normalError(Error)
-        /// close when network error.
+        /// the server close the connection
+        case serverClose(ResultCode.Disconnect)
+        /// the client close the connection
+        case clientClose(ResultCode.Disconnect)
+        /// Closed due to `MQTTError`. But exclude `MQTTError.serverClose` `MQTTError.clientClose`
+        case mqttError(MQTTError)
+        /// Other unclassified errors
+        case otherError(Error)
+        /// Closed due to `NWError`
         case networkError(NWError)
-        /// the server disconnected
-        case serverClosed(ResultCode.Disconnect)
-        /// user closed connectiion
-        case clientClosed(ResultCode.Disconnect)
         public var description: String{
             switch self{
             case .unsatisfied: return "Unsatisfied"
             case .pingTimeout: return "PingTimeout"
-            case .normalError(let error): return "Normal(\(error))"
-            case .networkError(let error): return "Network(\(error))"
-            case .serverClosed(let code): return "ServerClosed(\(code))"
-            case .clientClosed(let code): return "ClientClosed(\(code))"
+            case .serverClose(let code): return "ServerClose(\(code))"
+            case .clientClose(let code): return "ClientClose(\(code))"
+            case .mqttError(let error): return "MQTTError(\(error))"
+            case .otherError(let error): return "OtherError(\(error))"
+            case .networkError(let error): return "NetworkError(\(error))"
+            }
+        }
+        init(error:Error){
+            switch error{
+            case let err as NWError:
+                self = .networkError(err)
+            case let err as MQTTError:
+                self = .mqttError(err)
+            default:
+                self = .otherError(error)
             }
         }
     }

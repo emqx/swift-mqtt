@@ -65,6 +65,7 @@ class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
         super.init(UUID().uuidString, endpoint: .tls(host: "172.16.2.7",tls: .trustAll()))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
+        self.config.pingTimeout = 5
         self.config.username = "test"
         self.config.password = "test"
         self.config.pingEnabled = true
@@ -74,7 +75,7 @@ class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
         /// start auto reconnecting
         self.startRetrier{reason in
             switch reason{
-            case .serverClosed(let code):
+            case .serverClose(let code):
                 switch code{
                 case .serverBusy,.connectionRateExceeded:// don't retry when server is busy
                     return true

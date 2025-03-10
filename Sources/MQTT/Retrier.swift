@@ -100,79 +100,55 @@ extension MQTT{
             impl.cancel()
         }
     }
-
-    /// Implementation of ping pong mechanism
     final class Pinging:@unchecked Sendable{
-        private var times:Int = 0
-        /// current pinging timeout tolerance
-        public let timeout:TimeInterval
-        /// current pinging time interval
-        public let interval:TimeInterval
-        /// mqtt client
-        private weak var delegate:Client!
-        /// task
-        private var task:DelayTask? = nil
-        private var pongRecived:Bool = false
-        init(_ delegate:Client,timeout:TimeInterval,interval:TimeInterval) {
-            self.delegate = delegate
-            self.timeout = timeout
-            self.interval = interval
+        private let queue:DispatchQueue = .init(label: "swift.mqtt.ping.queue")
+        private let config:Config
+        private var tryCount:UInt8 = 0
+        private var lastTime:DispatchTime
+        private var item:DispatchWorkItem?
+        private weak var client:Client?
+        init(client:Client){
+            lastTime = .now()
+            config = client.config
+            self.client = client
         }
-        /// resume the pinging task
-        func resume(){
-            if task == nil{
-                times = 0
-                task = DelayTask(host: self)
+        func start(){
+            guard config.pingEnabled else { return }
+            guard item == nil else{ return }
+            tryCount = 0
+            lastTime = .now()
+            schedule()
+        }
+        func cancel(){
+            if item != nil{
+                item?.cancel()
+                item = nil
             }
         }
-        /// suspend the pinging task
-        /// cancel running task
-        func suspend(){
-            task = nil
+        func update(){
+            lastTime = .now()
         }
-        func onPong(){
-            pongRecived = true
-        }
-        private func sendPing(){
-            pongRecived = false
-            delegate.sendPingreq()
-        }
-        private func checkPong(){
-            if !pongRecived{
-                times += 1
-                if times >= delegate.config.pingTimes{
-                    times = 0
-                    delegate.pingTimeout()
-                }
-            }
-            task = DelayTask(host: self)
-        }
-        private class DelayTask {
-            private weak var host:Pinging!
-            private var item1:DispatchWorkItem? = nil
-            private var item2:DispatchWorkItem? = nil
-            deinit{
-                self.item1?.cancel()
-                self.item2?.cancel()
-            }
-            init(host:Pinging) {
-                self.host = host
-                let timeout = host.timeout
-                let interval = host.interval
-                self.item1 = after(interval){[weak self] in
-                    guard let self else { return }
-                    self.host.sendPing()
-                    self.item2 = self.after(timeout){[weak self] in
-                        guard let self else { return }
-                        self.host.checkPong()
+        private func schedule(){
+            let item = DispatchWorkItem{[weak self] in
+                guard let self else{ return }
+                guard let client = self.client else{ return }
+                if self.lastTime+TimeInterval(self.config.keepAlive) <= .now(){
+                    client.ping().finally{result in
+                        if case .failure = result{
+                            self.tryCount += 1
+                            if self.tryCount >= self.config.maxPingCount{
+                                client.pingTimeout()
+                            }
+                        }
+                        self.update()
+                        self.schedule()
                     }
+                }else{
+                    self.schedule()
                 }
             }
-            private func after(_ time:TimeInterval,block:@escaping (()->Void))->DispatchWorkItem{
-                let item = DispatchWorkItem(block: block)
-                self.host.delegate.queue.asyncAfter(deadline: .now() + time, execute: item)
-                return item
-            }
+            queue.asyncAfter(deadline: lastTime + TimeInterval(config.keepAlive), execute: item)
+            self.item = item
         }
     }
 }

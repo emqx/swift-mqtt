@@ -51,13 +51,6 @@ public extension Notification{
     }
 }
 
-public protocol MQTTDelegate:AnyObject,Sendable{
-    func mqtt(_ mqtt: MQTT.Client, didUpdate status:MQTT.Status, prev :MQTT.Status)
-    func mqtt(_ mqtt: MQTT.Client, didReceive message:MQTT.Message)
-    func mqtt(_ mqtt: MQTT.Client, didReceive error:Error)
-}
-/// Auth workflow
-public typealias Authflow = (@Sendable (Auth) -> Promise<Auth>)
 extension MQTT.Client{
     /// Add observer for some type
     /// - Parameters:
@@ -106,13 +99,6 @@ extension MQTT.Client{
             delegate.mqtt(self, didUpdate: status, prev: old)
             let info:[String:MQTT.Status] = ["old":old,"new":status]
             self.notify.post(name: MQTT.ObserverType.status.notifyName, object: self, userInfo: info)
-        }
-    }
-    private func nextPacketId() -> UInt16 {
-        return $packetId.write { id in
-            if id == UInt16.max {  id = 0 }
-            id += 1
-            return id
         }
     }
 }
