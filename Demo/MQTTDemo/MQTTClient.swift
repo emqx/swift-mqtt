@@ -62,7 +62,10 @@ class Observer{
 class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
     let observer = Observer()
     init() {
-        super.init(UUID().uuidString, endpoint: .tls(host: "172.16.2.7",tls: .trustAll()))
+        var options = TLSOptions()
+        options.trust = .trustAll
+        options.credential = try? .create(from: "", passwd: "")
+        super.init(UUID().uuidString, endpoint: .quic(host: "172.16.2.7",tls: options))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
         self.config.pingTimeout = 5
@@ -73,24 +76,25 @@ class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
         /// start network monitor
         self.startMonitor()
         /// start auto reconnecting
-        self.startRetrier{reason in
-            switch reason{
-            case .serverClose(let code):
-                switch code{
-                case .serverBusy,.connectionRateExceeded:// don't retry when server is busy
-                    return true
-                default:
-                    return false
-                }
-            default:
-                return false
-            }
-        }
+//        self.startRetrier{reason in
+//            switch reason{
+//            case .serverClose(let code):
+//                switch code{
+//                case .serverBusy,.connectionRateExceeded:// don't retry when server is busy
+//                    return true
+//                default:
+//                    return false
+//                }
+//            default:
+//                return false
+//            }
+//        }
         /// eg
         /// set simple delegate
         self.delegate = self
         /// eg.
         /// add multiple observer.
+        /// Don't observe self. If necessary use delegate
         self.addObserver(observer, for: .status, selector: #selector(Observer.statusChanged(_:)))
         self.addObserver(observer, for: .message, selector: #selector(Observer.recivedMessage(_:)))
         self.addObserver(observer, for: .error, selector: #selector(Observer.recivedError(_:)))

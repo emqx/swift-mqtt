@@ -113,33 +113,38 @@ public struct TLSOptions:Sendable{
     private let queue:DispatchQueue = {
         .init(label: "swift.mqtt.tls.queue")
     }()
-    /// use for self sign cert
-    public let verify:Verify?
-    /// use for mtls
-    public let credential: Credential?
-    /// the server name if need
-    public let serverName:String?
+    /// Use to verify the validity of the server certificate
+    public var trust:ServerTrust?
+    /// Use to client certificateertificate  challenge
+    public var credential: Credential?
+    /// the server name if need just like the host in http.
+    /// may be use to server trust
+    public var serverName:String?
     /// min tls version
-    public let minVersion:Version?
+    public var minVersion:Version?
     /// max tls version
-    public let maxVersion:Version?
-    public init(
-        verify: Verify? = nil,
-        credential: Credential? = nil,
-        serverName: String? = nil,
-        minVersion: Version? = nil,
-        maxVersion: Version? = nil)
-    {
-        self.verify = verify
+    public var maxVersion:Version?
+    /// session tickets enable
+    public var ticketsEnable:Bool?
+    /// false start enable
+    public var falseStartEnable:Bool?
+    /// resumption enable
+    public var resumptionEnabled:Bool?
+    
+    public init(trust: ServerTrust? = nil, credential: Credential? = nil, serverName: String? = nil, minVersion: Version? = nil, maxVersion: Version? = nil, sctEnable: Bool? = nil, ocspEnable: Bool? = nil, ticketsEnable: Bool? = nil, falseStartEnable: Bool? = nil, resumptionEnabled: Bool? = nil, renegotiationEnable: Bool? = nil) {
+        self.trust = trust
         self.credential = credential
         self.serverName = serverName
         self.minVersion = minVersion
         self.maxVersion = maxVersion
+        self.ticketsEnable = ticketsEnable
+        self.falseStartEnable = falseStartEnable
+        self.resumptionEnabled = resumptionEnabled
     }
     /// Build trust all certs options conveniently
     /// - Important: This setting is not secure and is usually only used as a test during the development phase
     public static func trustAll()->TLSOptions{
-        TLSOptions(verify: .trustAll)
+        TLSOptions(trust: .trustAll)
     }
     func update_sec_options(_ opt_t:sec_protocol_options_t){
         if let minVersion{
@@ -151,41 +156,40 @@ public struct TLSOptions:Sendable{
         if let serverName{
             sec_protocol_options_set_tls_server_name(opt_t, serverName)
         }
-        
-        sec_protocol_options_set_tls_resumption_enabled(opt_t,true)
-        sec_protocol_options_set_tls_tickets_enabled(opt_t, true)
-        sec_protocol_options_set_tls_false_start_enabled(opt_t,true)
-        
-        /// psk
-//        sec_protocol_options_add_pre_shared_key(opt_t, key, T##psk_identity: dispatch_data_t##dispatch_data_t)
-//        sec_protocol_options_set_tls_pre_shared_key_identity_hint(opt_t, )
-//        sec_protocol_options_set_pre_shared_key_selection_block(opt_t, { meta, data, complete in
-//            complete(data)
-//        }, queue)
-        
+        if let ticketsEnable{
+            sec_protocol_options_set_tls_tickets_enabled(opt_t, ticketsEnable)
+        }
+        if let falseStartEnable{
+            sec_protocol_options_set_tls_false_start_enabled(opt_t, falseStartEnable)
+        }
+        if let resumptionEnabled{
+            sec_protocol_options_set_tls_resumption_enabled(opt_t, resumptionEnabled)
+        }
         if let identity = credential?.identity{
             sec_protocol_options_set_local_identity(opt_t, identity)
-            sec_protocol_options_set_challenge_block(opt_t, {
-                _, complette in complette(identity)
+            sec_protocol_options_set_challenge_block(opt_t, { _, complette in
+                complette(identity)
             }, queue)
         }
-        switch self.verify {
+        switch self.trust {
         case .trustAll:
-            sec_protocol_options_set_verify_block(opt_t, { _, _, complete in complete(true) }, queue)
+            sec_protocol_options_set_peer_authentication_required(opt_t,false)
         case .trustRoots(let trusts):
-            sec_protocol_options_set_verify_block(opt_t,
-                { _, sec_trust, complete in
-                    let trust = sec_trust_copy_ref(sec_trust).takeRetainedValue()
-                    SecTrustSetAnchorCertificates(trust, trusts as CFArray)
-                    SecTrustEvaluateAsyncWithError(trust, self.queue) { _, result, error in
-                        if let error {
-                            MQTT.Logger.error("Trust failed: \(error.localizedDescription)")
-                        }
-                        complete(result)
+            sec_protocol_options_set_verify_block(opt_t,{ _, sec_trust, complete in
+                let trust = sec_trust_copy_ref(sec_trust).takeRetainedValue()
+                SecTrustSetAnchorCertificates(trust, trusts as CFArray)
+                SecTrustEvaluateAsyncWithError(trust, self.queue) { _, result, error in
+                    if let error {
+                        MQTT.Logger.error("Trust failed: \(error.localizedDescription)")
                     }
-                },
-                queue
-            )
+                    complete(result)
+                }
+            }, queue )
+        case .trustBlock(let block):
+            sec_protocol_options_set_verify_block(opt_t,{ _, sec_trust, complete in
+                let trust = sec_trust_copy_ref(sec_trust).takeRetainedValue()
+                complete(block(trust))
+            }, queue )
         default:
             break
         }
@@ -203,10 +207,17 @@ extension TLSOptions{
             }
         }
     }
-    public enum Verify:@unchecked Sendable{
+    /// Server Trust
+    public enum ServerTrust:@unchecked Sendable{
+        /// trust all means not verify
+        /// - Important: This setting is not secure and is usually only used as a test during the development phase
         case trustAll
+        /// Verify the self-signed root certificate
         case trustRoots([SecCertificate])
-        public static func trust(der filePath:String)throws -> Verify{
+        /// custom verify logic
+        case trustBlock(@Sendable (SecTrust)->Bool)
+        /// load certificate from file
+        public static func trust(der filePath:String)throws -> Self{
             let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
             if let cert = SecCertificateCreateWithData(nil, data as CFData) {
                 return .trustRoots([cert])
@@ -217,10 +228,12 @@ extension TLSOptions{
     public struct Credential:@unchecked Sendable{
         public let id:SecIdentity
         public let certs:[SecCertificate]
-        public static func create(from file:String,passwd:String)throws->Self{
-            let data = try Data(contentsOf: URL(fileURLWithPath: file))
+        /// create from p12 filePath
+        public static func create(from filePath:String,passwd:String)throws->Self{
+            let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
             return try create(from: data, passwd: passwd)
         }
+        /// create from p12 data
         public static func create(from data:Data,passwd:String)throws ->Self{
             let options = [kSecImportExportPassphrase as String: passwd]
             var rawItems: CFArray?

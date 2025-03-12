@@ -57,16 +57,16 @@ extension MQTT.Client{
     ///    - observer:the observer
     ///    - type: observer type
     ///    - selector: callback selector
-    /// - Important:Note that this operation will strongly references `observer`. The observer must be removed when not in use.
-    public func addObserver(_ observer:AnyObject,for type:MQTT.ObserverType,selector:Selector){
+    /// - Important:Note that this operation will strongly references `observer`. The observer must be removed when not in use. Don't add `self`. If really necessary please use `delegate`
+    public func addObserver(_ observer:Any,for type:MQTT.ObserverType,selector:Selector){
         notify.addObserver(observer, selector: selector, name: type.notifyName, object: self)
     }
     /// Remove some type of observer
-    public func removeObserver(_ observer:AnyObject,for type:MQTT.ObserverType){
+    public func removeObserver(_ observer:Any,for type:MQTT.ObserverType){
         notify.removeObserver(observer, name: type.notifyName, object: self)
     }
     /// Remove all types of observer
-    public func removeObserver(_ observer:AnyObject){
+    public func removeObserver(_ observer:Any){
         MQTT.ObserverType.allCases.forEach {
             self.notify.removeObserver(observer, name: $0.notifyName, object: self)
         }
