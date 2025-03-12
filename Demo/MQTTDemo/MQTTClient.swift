@@ -65,6 +65,9 @@ class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
         var options = TLSOptions()
         options.trust = .trustAll
         options.credential = try? .create(from: "", passwd: "")
+        options.serverName = "example.com"
+        options.minVersion = .v1_2
+        options.falseStartEnable = true
         super.init(UUID().uuidString, endpoint: .quic(host: "172.16.2.7",tls: options))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
@@ -76,19 +79,19 @@ class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
         /// start network monitor
         self.startMonitor()
         /// start auto reconnecting
-//        self.startRetrier{reason in
-//            switch reason{
-//            case .serverClose(let code):
-//                switch code{
-//                case .serverBusy,.connectionRateExceeded:// don't retry when server is busy
-//                    return true
-//                default:
-//                    return false
-//                }
-//            default:
-//                return false
-//            }
-//        }
+        self.startRetrier{reason in
+            switch reason{
+            case .serverClose(let code):
+                switch code{
+                case .serverBusy,.connectionRateExceeded:// don't retry when server is busy
+                    return true
+                default:
+                    return false
+                }
+            default:
+                return false
+            }
+        }
         /// eg
         /// set simple delegate
         self.delegate = self
