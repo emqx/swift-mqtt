@@ -35,7 +35,7 @@ extension MQTT{
         private let queue:DispatchQueue
         //--- Keep safely by sharing a same status lock ---
         private let safe = Safely()//status safe lock
-        private var socket:Socket
+        private let socket:Socket
         private var retrier:Retrier?
         private var pinging:Pinging?
         private var monitor:Monitor?
@@ -97,13 +97,16 @@ extension MQTT{
         public func stopMonitor(){
             setMonitor(false)
         }
-        public var status:Status{
-            safe.lock(); defer{ safe.unlock() }
-            return _status
-        }
-        private func setStatus(_ status:Status){
-            safe.lock();  defer{ safe.unlock() }
-            _status = status
+        /// current client status
+        public private(set) var status:Status{
+            get {
+                safe.lock(); defer{ safe.unlock() }
+                return _status
+            }
+            set {
+                safe.lock();  defer{ safe.unlock() }
+                _status = newValue
+            }
         }
         private var _status:Status = .closed(){
             didSet{
@@ -220,7 +223,7 @@ extension MQTT.Client{
             switch packet {
             case let connack as ConnackPacket:
                 try self.processConnack(connack)
-                self.setStatus(.opened)
+                self.status = .opened
                 if connack.sessionPresent {
                     self.resendOnRestart()
                 } else {
@@ -231,7 +234,7 @@ extension MQTT.Client{
                 guard let authflow = self.authflow else { throw MQTTError.authflowRequired}
                 return self.processAuth(auth, authflow: authflow).then{ result in
                     if let packet = result as? ConnackPacket{
-                        self.setStatus(.opened)
+                        self.status = .opened
                         return packet
                     }
                     throw MQTTError.unexpectMessage
@@ -240,7 +243,7 @@ extension MQTT.Client{
                 throw MQTTError.unexpectMessage
             }
         }.catch { error in
-            self.setStatus(.closed(.init(error: error)))
+            self.status = .closed(.init(error: error))
         }
     }
 }
@@ -271,7 +274,7 @@ extension MQTT.Client{
             case .satisfied:
                 self.monitorConnect()
             case .unsatisfied:
-                self.setStatus(.closed(.unsatisfied))
+                self.status = .closed(.unsatisfied)
             default:
                 break
             }
@@ -544,15 +547,15 @@ extension MQTT.Client{
             return .init(MQTTError.alreadyClosed)
         case .opening:
             self.socket.cancel().finally { _ in
-                self.setStatus(.closed(.mqttError(MQTTError.clientClose(code))))
+                self.status = .closed(.mqttError(MQTTError.clientClose(code)))
             }
             return .init(())
         case .opened:
-            self.setStatus(.closing)
+            self.status = .closing
             return self.sendNoWait(packet).map{ _ in
                 return self.socket.cancel()
             }.map { _ in
-                self.setStatus(.closed(.mqttError(MQTTError.clientClose(code))))
+                self.status = .closed(.mqttError(MQTTError.clientClose(code)))
                 return .success(())
             }
         }
