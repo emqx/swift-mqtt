@@ -9,109 +9,108 @@ import Network
 import Foundation
 import Security
 
-extension MQTT{
-    public struct Endpoint:Sendable{
-        let type:Prototype
-        public let host:String
-        public let port:UInt16
-        public let opt:NWProtocolOptions
-        public let tls:TLSOptions?
-        
-        /// Create a `TCP`protocol endpoint
-        /// - Parameters:
-        ///    - host: The host ip or domain
-        ///    - port: The server listen port
-        ///    - opt: The tcp protocol options
-        ///
-        public static func tcp(host:String,port:UInt16 = 1883,opt:NWProtocolTCP.Options = .init())->Endpoint{
-            return .init(type: .tcp,host: host, port: port,opt: opt,tls: nil)
-        }
-        /// Create a `TCP`protocol endpoint using `TLS`
-        /// - Parameters:
-        ///    - host: The host ip or domain
-        ///    - port: The server listen port
-        ///    - opt: The tcp protocol options
-        ///    - tls: The tls handshake options
-        ///
-        public static func tls(host:String,port:UInt16 = 8883,opt:NWProtocolTCP.Options = .init(),tls:TLSOptions? = nil)->Endpoint{
-            return .init(type: .tls,host: host, port: port,opt: opt,tls: tls)
-        }
-        /// Create a `QUIC`protocol endpoint
-        /// - Parameters:
-        ///    - host: The host ip or domain
-        ///    - port: The server listen port
-        ///    - opt: The quic protocol options
-        ///    - tls: The tls handshake options
-        /// - Important: The property `opt.idleTimout` wil bel overwrited by `config.keepAlive` when `config.pingEnable` is true.
-        ///
-        @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
-        public static func quic(host:String,port:UInt16 = 14567,opt:NWProtocolQUIC.Options = .mqtt,tls:TLSOptions? = nil)->Endpoint{
-            return .init(type: .quic,host: host, port: port,opt: opt,tls: tls)
-        }
-        func params(config:Config)->(NWEndpoint,NWParameters){
-            switch self.type {
-            case .quic:
-                if #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) {
-                    let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
-                    let quic = opt as! NWProtocolQUIC.Options
-                    if config.pingEnabled{
-                        quic.idleTimeout = Int(config.keepAlive) * 1500 // 1.5x keepAlive time
-                    }
-                    
-                    tls?.update_sec_options(quic.securityProtocolOptions)
-                    let params = NWParameters(quic: quic)
-                    params.allowFastOpen = true // allow fast open
-                    return (endpoint,params)
-                } else {
-                    fatalError("Never happend")
+enum Prototype{ case ws,tcp,tls,wss,quic }
+
+public struct Endpoint:Sendable{
+    let type:Prototype
+    public let host:String
+    public let port:UInt16
+    public let opt:NWProtocolOptions
+    public let tls:TLSOptions?
+    
+    /// Create a `TCP`protocol endpoint
+    /// - Parameters:
+    ///    - host: The host ip or domain
+    ///    - port: The server listen port
+    ///    - opt: The tcp protocol options
+    ///
+    public static func tcp(host:String,port:UInt16 = 1883,opt:NWProtocolTCP.Options = .init())->Endpoint{
+        return .init(type: .tcp,host: host, port: port,opt: opt,tls: nil)
+    }
+    /// Create a `TCP`protocol endpoint using `TLS`
+    /// - Parameters:
+    ///    - host: The host ip or domain
+    ///    - port: The server listen port
+    ///    - opt: The tcp protocol options
+    ///    - tls: The tls handshake options
+    ///
+    public static func tls(host:String,port:UInt16 = 8883,opt:NWProtocolTCP.Options = .init(),tls:TLSOptions? = nil)->Endpoint{
+        return .init(type: .tls,host: host, port: port,opt: opt,tls: tls)
+    }
+    /// Create a `QUIC`protocol endpoint
+    /// - Parameters:
+    ///    - host: The host ip or domain
+    ///    - port: The server listen port
+    ///    - opt: The quic protocol options
+    ///    - tls: The tls handshake options
+    /// - Important: The property `opt.idleTimout` wil bel overwrited by `config.keepAlive` when `config.pingEnable` is true.
+    ///
+    @available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+    public static func quic(host:String,port:UInt16 = 14567,opt:NWProtocolQUIC.Options = .mqtt,tls:TLSOptions? = nil)->Endpoint{
+        return .init(type: .quic,host: host, port: port,opt: opt,tls: tls)
+    }
+    func params(config:Config)->(NWEndpoint,NWParameters){
+        switch self.type {
+        case .quic:
+            if #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) {
+                let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
+                let quic = opt as! NWProtocolQUIC.Options
+                if config.pingEnabled{
+                    quic.idleTimeout = Int(config.keepAlive) * 1500 // 1.5x keepAlive time
                 }
-            case .tcp:
-                let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
-                let tcp = opt as! NWProtocolTCP.Options
-                tcp.connectionTimeout = Int(config.connectTimeout)
-                let params = NWParameters(tls: nil, tcp: tcp)
+                
+                tls?.update_sec_options(quic.securityProtocolOptions)
+                let params = NWParameters(quic: quic)
                 params.allowFastOpen = true // allow fast open
                 return (endpoint,params)
-            case .tls:
-                let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
-                let tcp = opt as! NWProtocolTCP.Options
-                tcp.connectionTimeout = Int(config.connectTimeout)
-                let tlsOptions = NWProtocolTLS.Options()
-                tls?.update_sec_options(tlsOptions.securityProtocolOptions)
-                let params = NWParameters(tls: tlsOptions, tcp: tcp)
-                params.allowFastOpen = true // allow fast open
-                return (endpoint,params)
-            case .wss:
-                let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
-                let tcp = opt as! NWProtocolTCP.Options
-                tcp.connectionTimeout = Int(config.connectTimeout)
-                let tlsOptions = NWProtocolTLS.Options()
-                tls?.update_sec_options(tlsOptions.securityProtocolOptions)
-                let params = NWParameters(tls: tlsOptions, tcp: tcp)
-                let wsOptions = NWProtocolWebSocket.Options()
-                wsOptions.setSubprotocols(["mqtt"])
-                params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
-                params.allowFastOpen = true // allow fast open
-                return (endpoint,params)
-            case .ws:
-                let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
-                let tcp = opt as! NWProtocolTCP.Options
-                tcp.connectionTimeout = Int(config.connectTimeout)
-                let params = NWParameters(tls: nil, tcp: tcp)
-                let wsOptions = NWProtocolWebSocket.Options()
-                wsOptions.setSubprotocols(["mqtt"])
-                params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
-                params.allowFastOpen = true // allow fast open
-                return (endpoint,params)
+            } else {
+                fatalError("Never happend")
             }
+        case .tcp:
+            let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
+            let tcp = opt as! NWProtocolTCP.Options
+            tcp.connectionTimeout = Int(config.connectTimeout)
+            let params = NWParameters(tls: nil, tcp: tcp)
+            params.allowFastOpen = true // allow fast open
+            return (endpoint,params)
+        case .tls:
+            let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
+            let tcp = opt as! NWProtocolTCP.Options
+            tcp.connectionTimeout = Int(config.connectTimeout)
+            let tlsOptions = NWProtocolTLS.Options()
+            tls?.update_sec_options(tlsOptions.securityProtocolOptions)
+            let params = NWParameters(tls: tlsOptions, tcp: tcp)
+            params.allowFastOpen = true // allow fast open
+            return (endpoint,params)
+        case .wss:
+            let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
+            let tcp = opt as! NWProtocolTCP.Options
+            tcp.connectionTimeout = Int(config.connectTimeout)
+            let tlsOptions = NWProtocolTLS.Options()
+            tls?.update_sec_options(tlsOptions.securityProtocolOptions)
+            let params = NWParameters(tls: tlsOptions, tcp: tcp)
+            let wsOptions = NWProtocolWebSocket.Options()
+            wsOptions.setSubprotocols(["mqtt"])
+            params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
+            params.allowFastOpen = true // allow fast open
+            return (endpoint,params)
+        case .ws:
+            let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
+            let tcp = opt as! NWProtocolTCP.Options
+            tcp.connectionTimeout = Int(config.connectTimeout)
+            let params = NWParameters(tls: nil, tcp: tcp)
+            let wsOptions = NWProtocolWebSocket.Options()
+            wsOptions.setSubprotocols(["mqtt"])
+            params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
+            params.allowFastOpen = true // allow fast open
+            return (endpoint,params)
         }
     }
-    enum Prototype{ case ws,tcp,tls,wss,quic }
 }
 
 public struct TLSOptions:Sendable{
     private let queue:DispatchQueue = {
-        .init(label: "swift.mqtt.tls.queue")
+        .init(label: "mqtt.tls.queue")
     }()
     /// Use to verify the validity of the server certificate
     public var trust:ServerTrust?
@@ -180,7 +179,7 @@ public struct TLSOptions:Sendable{
                 SecTrustSetAnchorCertificates(trust, trusts as CFArray)
                 SecTrustEvaluateAsyncWithError(trust, self.queue) { _, result, error in
                     if let error {
-                        MQTT.Logger.error("Trust failed: \(error.localizedDescription)")
+                        Logger.error("Trust failed: \(error.localizedDescription)")
                     }
                     complete(result)
                 }

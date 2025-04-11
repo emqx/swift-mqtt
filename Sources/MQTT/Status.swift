@@ -8,73 +8,71 @@
 import Foundation
 import Network
 
-extension MQTT{
-    /// state machine
-    public enum Status:Sendable,Hashable,CustomStringConvertible{
-        public static func == (lhs: MQTT.Status, rhs: MQTT.Status) -> Bool {
-            lhs.hashValue == rhs.hashValue
-        }
-        case opened
-        case opening
-        case closing
-        case closed(CloseReason? = nil)
-        public var description: String{
-            switch self{
-            case .opening: return "opening"
-            case .closing: return "closing"
-            case .opened:  return "opened"
-            case .closed: return "closed"
-            }
-        }
-        public func hash(into hasher: inout Hasher) {
-            switch self {
-            case .opened:
-                0.hash(into: &hasher)
-            case .opening:
-                1.hash(into: &hasher)
-            case .closing:
-                2.hash(into: &hasher)
-            case .closed:
-                3.hash(into: &hasher)
-            }
+/// state machine
+public enum Status:Sendable,Hashable,CustomStringConvertible{
+    public static func == (lhs: Status, rhs: Status) -> Bool {
+        lhs.hashValue == rhs.hashValue
+    }
+    case opened
+    case opening
+    case closing
+    case closed(CloseReason? = nil)
+    public var description: String{
+        switch self{
+        case .opening: return "opening"
+        case .closing: return "closing"
+        case .opened:  return "opened"
+        case .closed: return "closed"
         }
     }
-    ///  close reason
-    public enum CloseReason:Sendable,CustomStringConvertible{
-        /// close when ping timeout
-        case pingTimeout
-        /// auto close by network monitor when network unsatisfied
-        case unsatisfied
-        /// the server close the connection
-        case serverClose(ResultCode.Disconnect)
-        /// the client close the connection
-        case clientClose(ResultCode.Disconnect)
-        /// Closed due to `MQTTError`. But exclude `MQTTError.serverClose` `MQTTError.clientClose`
-        case mqttError(MQTTError)
-        /// Other unclassified errors
-        case otherError(Error)
-        /// Closed due to `NWError`
-        case networkError(NWError)
-        public var description: String{
-            switch self{
-            case .unsatisfied: return "Unsatisfied"
-            case .pingTimeout: return "PingTimeout"
-            case .serverClose(let code): return "ServerClose(\(code))"
-            case .clientClose(let code): return "ClientClose(\(code))"
-            case .mqttError(let error): return "MQTTError(\(error))"
-            case .otherError(let error): return "OtherError(\(error))"
-            case .networkError(let error): return "NetworkError(\(error))"
-            }
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .opened:
+            0.hash(into: &hasher)
+        case .opening:
+            1.hash(into: &hasher)
+        case .closing:
+            2.hash(into: &hasher)
+        case .closed:
+            3.hash(into: &hasher)
         }
-        init(error:Error){
-            switch error{
-            case let err as NWError:
-                self = .networkError(err)
-            case let err as MQTTError:
-                self = .mqttError(err)
-            default:
-                self = .otherError(error)
-            }
+    }
+}
+///  close reason
+public enum CloseReason:Sendable,CustomStringConvertible{
+    /// close when ping timeout
+    case pingTimeout
+    /// auto close by network monitor when network unsatisfied
+    case unsatisfied
+    /// the server close the connection
+    case serverClose(ResultCode.Disconnect)
+    /// the client close the connection
+    case clientClose(ResultCode.Disconnect)
+    /// Closed due to `MQTTError`. But exclude `MQTTError.serverClose` `MQTTError.clientClose`
+    case mqttError(MQTTError)
+    /// Other unclassified errors
+    case otherError(Error)
+    /// Closed due to `NWError`
+    case networkError(NWError)
+    public var description: String{
+        switch self{
+        case .unsatisfied: return "Unsatisfied"
+        case .pingTimeout: return "PingTimeout"
+        case .serverClose(let code): return "ServerClose(\(code))"
+        case .clientClose(let code): return "ClientClose(\(code))"
+        case .mqttError(let error): return "MQTTError(\(error))"
+        case .otherError(let error): return "OtherError(\(error))"
+        case .networkError(let error): return "NetworkError(\(error))"
+        }
+    }
+    init(error:Error){
+        switch error{
+        case let err as NWError:
+            self = .networkError(err)
+        case let err as MQTTError:
+            self = .mqttError(err)
+        default:
+            self = .otherError(error)
         }
     }
 }

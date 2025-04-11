@@ -41,40 +41,46 @@ let package = Package(
 import MQTT
 import Foundation
 
-let client = MQTTClient()
+let client = Client()
 
 class Observer{
     @objc func statusChanged(_ notify:Notification){
         guard let info = notify.mqttStatus() else{
             return
         }
-        print("from:",info.old," to:",info.old)
+        Logger.info("observed: status: \(info.old)--> \(info.new)")
     }
     @objc func recivedMessage(_ notify:Notification){
         guard let info = notify.mqttMesaage() else{
             return
         }
         let str = String(data: info.message.payload, encoding: .utf8) ?? ""
-        print(str)
+        Logger.info("observed: message: \(str)")
     }
     @objc func recivedError(_ notify:Notification){
         guard let info = notify.mqttError() else{
             return
         }
-        print(info.error)
+        Logger.info("observed: error: \(info.error)")
     }
 }
-class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
+class Client:MQTTClient.V5,@unchecked Sendable{
     let observer = Observer()
     init() {
-        let clientID = UUID().uuidString
-        super.init(clientID, endpoint: .quic(host: "172.16.2.7",tls: .trustAll()))
+        var options = TLSOptions()
+        options.trust = .trustAll
+        options.credential = try? .create(from: "", passwd: "")
+        options.serverName = "example.com"
+        options.minVersion = .v1_2
+        options.falseStartEnable = true
+        super.init(UUID().uuidString, endpoint: .quic(host: "172.16.2.7",tls: options))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
+        self.config.pingTimeout = 5
         self.config.username = "test"
         self.config.password = "test"
         self.config.pingEnabled = true
-        
+        self.delegateQueue = .main
         /// start network monitor
         self.startMonitor()
         /// start auto reconnecting
@@ -96,23 +102,27 @@ class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
         self.delegate = self
         /// eg.
         /// add multiple observer.
-        self.addObserver(observer, of: .status, selector: #selector(Observer.statusChanged(_:)))
-        self.addObserver(observer, of: .message, selector: #selector(Observer.recivedMessage(_:)))
-        self.addObserver(observer, of: .error, selector: #selector(Observer.recivedError(_:)))
+        /// Don't observe self. If necessary use delegate
+        self.addObserver(observer, for: .status, selector: #selector(Observer.statusChanged(_:)))
+        self.addObserver(observer, for: .message, selector: #selector(Observer.recivedMessage(_:)))
+        self.addObserver(observer, for: .error, selector: #selector(Observer.recivedError(_:)))
     }
     
 }
-extension MQTTClient:MQTTDelegate{
-    func mqtt(_ mqtt: MQTT.Client, didUpdate status: MQTT.Status, prev: MQTT.Status) {
-        print("status:",status)
+extension Client:MQTTDelegate{
+    func mqtt(_ mqtt: MQTTClient, didUpdate status: Status, prev: Status) {
+        Logger.info("delegate: status \(prev)--> \(status)")
+
     }
-    func mqtt(_ mqtt: MQTT.Client, didReceive error: any Error) {
-        print("Error:",error)
+    func mqtt(_ mqtt: MQTTClient, didReceive error: any Error) {
+        Logger.info("delegate: error \(error)")
     }
-    func mqtt(_ mqtt: MQTT.Client, didReceive message: MQTT.Message) {
-        print("message:",message)
+    func mqtt(_ mqtt: MQTTClient, didReceive message: Message) {
+        let str = String(data: message.payload, encoding: .utf8) ?? ""
+        Logger.info("delegate: message: \(str)")
     }
 }
+
 
 client.open()
 client.close()

@@ -8,150 +8,139 @@
 import Foundation
 @_exported import Promise
 
-///
-/// Global MQTT namespace
-///
-public enum MQTT:Sendable{ }
-
-
-extension MQTT{
-    public enum Logger:Sendable{
-        nonisolated(unsafe) public static var level:Level = .warning
-        private static func log(_ level: Level, message: String) {
-            guard level.rawValue >= self.level.rawValue else { return }
-            print("MQTT(\(level)): \(message)")
-        }
-        public static func debug(_ message: String) {
-            log(.debug, message: message)
-        }
-        public static func info(_ message: String) {
-            log(.info, message: message)
-        }
-        public static func warning(_ message: String) {
-            log(.warning, message: message)
-        }
-        public static func error(_ message: String) {
-            log(.error, message: message)
-        }
-        public static func error(_ error: Error?){
-            log(.error, message: error.debugDescription)
-        }
+public enum Logger:Sendable{
+    nonisolated(unsafe) public static var level:Level = .warning
+    private static func log(_ level: Level, message: String) {
+        guard level.rawValue >= self.level.rawValue else { return }
+        print("MQTT(\(level)): \(message)")
+    }
+    public static func debug(_ message: String) {
+        log(.debug, message: message)
+    }
+    public static func info(_ message: String) {
+        log(.info, message: message)
+    }
+    public static func warning(_ message: String) {
+        log(.warning, message: message)
+    }
+    public static func error(_ message: String) {
+        log(.error, message: message)
+    }
+    public static func error(_ error: Error?){
+        log(.error, message: error.debugDescription)
     }
 }
-extension MQTT.Logger{
+extension Logger{
     public enum Level: Int, Sendable {
         case debug = 0, info, warning, error, off
     }
 }
-extension MQTT{
-    public enum Version:Sendable{
-        case v5_0
-        case v3_1_1
-        var string:String{
-            switch self {
-            case .v5_0:  return "5.0"
-            case .v3_1_1: return "3.1.1"
-            }
-        }
-        var uint8: UInt8 {
-            switch self {
-            case .v3_1_1: return 4
-            case .v5_0: return 5
-            }
+public enum Version:Sendable{
+    case v5_0
+    case v3_1_1
+    var string:String{
+        switch self {
+        case .v5_0:  return "5.0"
+        case .v3_1_1: return "3.1.1"
         }
     }
-    public final class Config:@unchecked Sendable{
-        /// protocol version init in client
-        public let version:MQTT.Version
-        /// Version of MQTT server client is connecting to
-        public internal(set) var clientId: String
-        /// MQTT username.
-        /// - Note:Please set this value before client open, otherwise it will take effect on the next open
-        public var username: String? = nil
-        /// MQTT password.
-        /// - Note:Please set this value before client open, otherwise it will take effect on the next open
-        public var password: String? = nil
-        /// MQTT keep alive period in second.
-        /// It will take effect immediately
-        public var keepAlive: UInt16 = 60{
-            didSet{
-                assert(keepAlive>0, "keepalive must be greater than zero!")
-            }
-        }
-        /// enable `keepAlive`
-        /// - Note:Please set this value before client open, otherwise it will take effect on the next open
-        public var pingEnabled: Bool = true
-        /// timeout second for `keepAlive`
-        /// It will take effect at next ping request
-        public var pingTimeout: TimeInterval = 5{
-            didSet{
-                assert(pingTimeout>0, "pingTimeout must be greater than zero!")
-            }
-        }
-        ///The max times the connection consecutive ping timeouts
-        /// It will take effect immediately
-        public var maxPingCount:UInt8 = 1{
-            didSet{
-                assert(maxPingCount>0, "maxPingCount must be greater than zero!")
-            }
-        }
-        /// timeout second  for connecting to server
-        /// - Important: This setting does not take effect in the quic protocol. In the quic protocol is fixed at 30s and cannot be modified
-        /// - Note:Please set this value before client open, otherwise it will take effect on the next open
-        public var connectTimeout: TimeInterval = 30{
-            didSet{
-                assert(connectTimeout>0, "connectTimeout must be greater than zero!")
-            }
-        }
-        /// timeout second  for pubulish  flow acks
-        /// It will take effect immediately
-        public var publishTimeout: TimeInterval = 5{
-            didSet{
-                assert(publishTimeout>0, "publishTimeout must be greater than zero!")
-            }
-        }
-        /// timeout second for write data to connection
-        /// It will take effect immediately
-        public var writingTimeout: TimeInterval = 5{
-            didSet{
-                assert(writingTimeout>0, "writingTimeout must be greater than zero!")
-            }
-        }
-        init(_ version:Version,clientId:String){
-            self.version = version
-            self.clientId = clientId
+    var uint8: UInt8 {
+        switch self {
+        case .v3_1_1: return 4
+        case .v5_0: return 5
         }
     }
 }
-extension MQTT{
-    class Task:@unchecked Sendable{
-        private let promise:Promise<Packet>
-        private var item:DispatchWorkItem?
-        init(){
-            self.promise = .init()
+public final class Config:@unchecked Sendable{
+    /// protocol version init in client
+    public let version:Version
+    /// Version of MQTT server client is connecting to
+    public internal(set) var clientId: String
+    /// MQTT username.
+    /// - Note:Please set this value before client open, otherwise it will take effect on the next open
+    public var username: String? = nil
+    /// MQTT password.
+    /// - Note:Please set this value before client open, otherwise it will take effect on the next open
+    public var password: String? = nil
+    /// MQTT keep alive period in second.
+    /// It will take effect immediately
+    public var keepAlive: UInt16 = 60{
+        didSet{
+            assert(keepAlive>0, "keepalive must be greater than zero!")
         }
-        func done(with packet: Packet){
-            if self.promise.isDone{ return }
-            self.promise.done(packet)
-            self.item?.cancel()
-            self.item = nil
+    }
+    /// enable `keepAlive`
+    /// - Note:Please set this value before client open, otherwise it will take effect on the next open
+    public var pingEnabled: Bool = true
+    /// timeout second for `keepAlive`
+    /// It will take effect at next ping request
+    public var pingTimeout: TimeInterval = 5{
+        didSet{
+            assert(pingTimeout>0, "pingTimeout must be greater than zero!")
         }
-        func done(with error: any Error){
-            if self.promise.isDone{ return }
-            self.promise.done(error)
-            self.item?.cancel()
-            self.item = nil
+    }
+    ///The max times the connection consecutive ping timeouts
+    /// It will take effect immediately
+    public var maxPingCount:UInt8 = 1{
+        didSet{
+            assert(maxPingCount>0, "maxPingCount must be greater than zero!")
         }
-        func start(in queue:DispatchQueue, timeout:TimeInterval? = nil) -> Promise<Packet>{
-            if let timeout{
-                let item = DispatchWorkItem{[weak self] in
-                    self?.promise.done(MQTTError.timeout)
-                }
-                queue.asyncAfter(deadline: .now()+timeout, execute: item)
-                self.item = item
+    }
+    /// timeout second  for connecting to server
+    /// - Important: This setting does not take effect in the quic protocol. In the quic protocol is fixed at 30s and cannot be modified
+    /// - Note:Please set this value before client open, otherwise it will take effect on the next open
+    public var connectTimeout: TimeInterval = 30{
+        didSet{
+            assert(connectTimeout>0, "connectTimeout must be greater than zero!")
+        }
+    }
+    /// timeout second  for pubulish  flow acks
+    /// It will take effect immediately
+    public var publishTimeout: TimeInterval = 5{
+        didSet{
+            assert(publishTimeout>0, "publishTimeout must be greater than zero!")
+        }
+    }
+    /// timeout second for write data to connection
+    /// It will take effect immediately
+    public var writingTimeout: TimeInterval = 5{
+        didSet{
+            assert(writingTimeout>0, "writingTimeout must be greater than zero!")
+        }
+    }
+    init(_ version:Version,clientId:String){
+        self.version = version
+        self.clientId = clientId
+    }
+}
+
+class MQTTTask:@unchecked Sendable{
+    private let promise:Promise<Packet>
+    private var item:DispatchWorkItem?
+    init(){
+        self.promise = .init()
+    }
+    func done(with packet: Packet){
+        if self.promise.isDone{ return }
+        self.promise.done(packet)
+        self.item?.cancel()
+        self.item = nil
+    }
+    func done(with error: any Error){
+        if self.promise.isDone{ return }
+        self.promise.done(error)
+        self.item?.cancel()
+        self.item = nil
+    }
+    func start(in queue:DispatchQueue, timeout:TimeInterval? = nil) -> Promise<Packet>{
+        if let timeout{
+            let item = DispatchWorkItem{[weak self] in
+                self?.promise.done(MQTTError.timeout)
             }
-            return self.promise
+            queue.asyncAfter(deadline: .now()+timeout, execute: item)
+            self.item = item
         }
+        return self.promise
     }
 }
 /// Indicates the level of assurance for delivery of a packet.

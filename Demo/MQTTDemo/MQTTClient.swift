@@ -36,7 +36,7 @@ extension Logger{
     }
 }
 
-let client = MQTTClient()
+let client = Client()
 
 class Observer{
     @objc func statusChanged(_ notify:Notification){
@@ -59,7 +59,7 @@ class Observer{
         Logger.info("observed: error: \(info.error)")
     }
 }
-class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
+class Client:MQTTClient.V5,@unchecked Sendable{
     let observer = Observer()
     init() {
         var options = TLSOptions()
@@ -104,15 +104,14 @@ class MQTTClient:MQTT.Client.V5,@unchecked Sendable{
     }
     
 }
-extension MQTTClient:MQTTDelegate{
-    func mqtt(_ mqtt: MQTT.Client, didUpdate status: MQTT.Status, prev: MQTT.Status) {
+extension Client:MQTTDelegate{
+    func mqtt(_ mqtt: MQTTClient, didUpdate status: Status, prev: Status) {
         Logger.info("delegate: status \(prev)--> \(status)")
-
     }
-    func mqtt(_ mqtt: MQTT.Client, didReceive error: any Error) {
+    func mqtt(_ mqtt: MQTTClient, didReceive error: any Error) {
         Logger.info("delegate: error \(error)")
     }
-    func mqtt(_ mqtt: MQTT.Client, didReceive message: MQTT.Message) {
+    func mqtt(_ mqtt: MQTTClient, didReceive message: Message) {
         let str = String(data: message.payload, encoding: .utf8) ?? ""
         Logger.info("delegate: message: \(str)")
     }

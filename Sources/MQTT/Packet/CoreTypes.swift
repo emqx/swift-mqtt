@@ -7,38 +7,36 @@
 
 import Foundation
 
-extension MQTT{
-    /// MQTT PUBLISH packet parameters.
-    public struct Message: Sendable {
-        /// Quality of Service for message.
-        public let qos: MQTTQoS
-        
-        /// Whether this is a duplicate publish message.
-        public let dup: Bool
+/// MQTT PUBLISH packet parameters.
+public struct Message: Sendable {
+    /// Quality of Service for message.
+    public let qos: MQTTQoS
+    
+    /// Whether this is a duplicate publish message.
+    public let dup: Bool
 
-        /// Topic name on which the message is published.
-        public let topic: String
-        
-        /// Whether this is a retained message.
-        public let retain: Bool
-        
-        /// Message payload.
-        public let payload: Data
+    /// Topic name on which the message is published.
+    public let topic: String
+    
+    /// Whether this is a retained message.
+    public let retain: Bool
+    
+    /// Message payload.
+    public let payload: Data
 
-        /// MQTT v5 properties
-        public let properties: Properties
+    /// MQTT v5 properties
+    public let properties: Properties
 
-        init(qos: MQTTQoS, dup: Bool, topic: String, retain: Bool, payload: Data, properties: Properties) {
-            self.qos = qos
-            self.dup = dup
-            self.topic = topic
-            self.retain = retain
-            self.payload = payload
-            self.properties = properties
-        }
-        func duplicate()->Message{
-            .init(qos: qos, dup: true, topic: topic, retain: retain, payload: payload, properties: properties)
-        }
+    init(qos: MQTTQoS, dup: Bool, topic: String, retain: Bool, payload: Data, properties: Properties) {
+        self.qos = qos
+        self.dup = dup
+        self.topic = topic
+        self.retain = retain
+        self.payload = payload
+        self.properties = properties
+    }
+    func duplicate()->Message{
+        .init(qos: qos, dup: true, topic: topic, retain: retain, payload: payload, properties: properties)
     }
 }
 
