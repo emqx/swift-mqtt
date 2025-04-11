@@ -4,14 +4,14 @@ import Network
 
 
 let mqtt = {
-    let endpoint:MQTT.Endpoint
+    let endpoint:Endpoint
     if #available(iOS 15.0, *) {
         endpoint = .quic(host: "172.16.2.7",tls: .trustAll())
     } else {
         endpoint = .tls(host: "172.16.2.7",tls: .trustAll())
     }
     
-    let m = MQTT.Client.V5("swift-mqtt", endpoint: endpoint)
+    let m = MQTTClient.V5("swift-mqtt", endpoint: endpoint)
     m.config.username = "test"
     m.config.password = "test"
     m.stopMonitor()

@@ -6,42 +6,40 @@
 //
 import Foundation
 
-extension MQTT{
-    public enum ObserverType:String,CaseIterable{
-        case error = "swift.mqtt.observer.error"
-        case status = "swift.mqtt.observer.status"
-        case message = "swift.mqtt.observer.message"
-        var notifyName:Notification.Name{ .init(rawValue: rawValue) }
-    }
+public enum ObserverType:String,CaseIterable{
+    case error = "mqtt.observer.error"
+    case status = "mqtt.observer.status"
+    case message = "mqtt.observer.message"
+    var notifyName:Notification.Name{ .init(rawValue: rawValue) }
 }
 /// Quickly get mqtt parameters from the notification
 public extension Notification{
     /// Parse mqtt message from `Notification` conveniently
-    func mqttMesaage()->(client:MQTT.Client,message:MQTT.Message)?{
-        guard let client = object as? MQTT.Client else{
+    func mqttMesaage()->(client:MQTTClient,message:Message)?{
+        guard let client = object as? MQTTClient else{
             return nil
         }
-        guard let message = userInfo?["message"] as? MQTT.Message else{
+        guard let message = userInfo?["message"] as? Message else{
             return nil
         }
         return (client,message)
     }
     /// Parse mqtt status from `Notification` conveniently
-    func mqttStatus()->(client:MQTT.Client,new:MQTT.Status,old:MQTT.Status)?{
-        guard let client = object as? MQTT.Client else{
+    func mqttStatus()->(client:MQTTClient,new:Status,old:Status)?{
+        guard let client = object as? MQTTClient else{
             return nil
         }
-        guard let new = userInfo?["new"] as? MQTT.Status else{
+        guard let new = userInfo?["new"] as? Status else{
             return nil
         }
-        guard let old = userInfo?["old"] as? MQTT.Status else{
+        guard let old = userInfo?["old"] as? Status else{
             return nil
         }
         return (client,new,old)
     }
     /// Parse mqtt error from `Notification` conveniently
-    func mqttError()->(client:MQTT.Client,error:Error)?{
-        guard let client = object as? MQTT.Client else{
+    func mqttError()->(client:MQTTClient,error:Error)?{
+        guard let client = object as? MQTTClient else{
             return nil
         }
         guard let error = userInfo?["error"] as? Error else{
@@ -51,18 +49,18 @@ public extension Notification{
     }
 }
 
-extension MQTT.Client{
+extension MQTTClient{
     /// Add observer for some type
     /// - Parameters:
     ///    - observer:the observer
     ///    - type: observer type
     ///    - selector: callback selector
     /// - Important:Note that this operation will strongly references `observer`. The observer must be removed when not in use. Don't add `self`. If really necessary please use `delegate`
-    public func addObserver(_ observer:Any,for type:MQTT.ObserverType,selector:Selector){
+    public func addObserver(_ observer:Any,for type:ObserverType,selector:Selector){
         notify.addObserver(observer, selector: selector, name: type.notifyName, object: self)
     }
     /// Remove some type of observer
-    public func removeObserver(_ observer:Any,for type:MQTT.ObserverType){
+    public func removeObserver(_ observer:Any,for type:ObserverType){
         notify.removeObserver(observer, name: type.notifyName, object: self)
     }
     /// Remove all types of observer
@@ -71,14 +69,14 @@ extension MQTT.Client{
             self.notify.removeObserver(observer, name: $0.notifyName, object: self)
         }
     }
-    func notify(message:MQTT.Message){
+    func notify(message:Message){
         guard let delegate = delegate else{
             return
         }
         self.delegateQueue.async {
             delegate.mqtt(self, didReceive: message)
             let info = ["message":message]
-            self.notify.post(name: MQTT.ObserverType.message.notifyName, object: self, userInfo: info)
+            self.notify.post(name: ObserverType.message.notifyName, object: self, userInfo: info)
         }
     }
     func notify(error:Error){
@@ -88,34 +86,34 @@ extension MQTT.Client{
         self.delegateQueue.async {
             delegate.mqtt(self, didReceive: error)
             let info:[String:Error] = ["error":error]
-            self.notify.post(name: MQTT.ObserverType.error.notifyName, object: self, userInfo:info)
+            self.notify.post(name: ObserverType.error.notifyName, object: self, userInfo:info)
         }
     }
-    func notify(status:MQTT.Status,old:MQTT.Status){
+    func notify(status:Status,old:Status){
         guard let delegate = delegate else{
             return
         }
         self.delegateQueue.async {
             delegate.mqtt(self, didUpdate: status, prev: old)
-            let info:[String:MQTT.Status] = ["old":old,"new":status]
-            self.notify.post(name: MQTT.ObserverType.status.notifyName, object: self, userInfo: info)
+            let info:[String:Status] = ["old":old,"new":status]
+            self.notify.post(name: ObserverType.status.notifyName, object: self, userInfo: info)
         }
     }
 }
-extension MQTT.Client{
-    open class V3:MQTT.Client, @unchecked Sendable{
+extension MQTTClient{
+    open class V3:MQTTClient, @unchecked Sendable{
         /// Initial v3 client object
         ///
         /// - Parameters:
         ///   - clientID: Client Identifier
         ///   - endpoint:The network endpoint
-        public init(_ clientId: String, endpoint:MQTT.Endpoint) {
+        public init(_ clientId: String, endpoint:Endpoint) {
             super.init(clientId, endpoint: endpoint, version: .v3_1_1)
         }
     }
 }
 
-extension MQTT.Client.V3{
+extension MQTTClient.V3{
     /// Close from server
     /// - Parameters:
     ///   - code: close reason code send to the server
@@ -142,7 +140,7 @@ extension MQTT.Client.V3{
     @discardableResult
     public func open( will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool)? = nil, cleanStart: Bool = true ) -> Promise<Bool> {
         let message = will.map {
-            MQTT.Message(
+            Message(
                 qos: .atMostOnce,
                 dup: false,
                 topic: $0.topic,
@@ -184,7 +182,7 @@ extension MQTT.Client.V3{
         qos: MQTTQoS  = .atLeastOnce,
         retain: Bool = false
     ) -> Promise<Void> {
-        let message = MQTT.Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: [])
+        let message = Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: [])
         let packet = PublishPacket(id: nextPacketId(), message: message)
         return self.publish(packet: packet).then { _ in }
     }
@@ -243,19 +241,19 @@ extension MQTT.Client.V3{
 }
 
 
-extension MQTT.Client{
-    open class V5:MQTT.Client, @unchecked Sendable{
+extension MQTTClient{
+    open class V5:MQTTClient, @unchecked Sendable{
         /// Initial v5 client object
         ///
         /// - Parameters:
         ///   - clientID: Client Identifier
         ///   - endpoint:The network endpoint
-        public init(_ clientId: String, endpoint:MQTT.Endpoint) {
+        public init(_ clientId: String, endpoint:Endpoint) {
             super.init(clientId, endpoint: endpoint, version: .v5_0)
         }
     }
 }
-extension MQTT.Client.V5{
+extension MQTTClient.V5{
     /// Publish message to topic
     ///
     /// - Parameters:
@@ -287,7 +285,7 @@ extension MQTT.Client.V5{
     /// `QoS0` retrun nil. `QoS1` and above return an `Puback` which contains a `code` and `properties`
     @discardableResult
     public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<Puback?> {
-        let message = MQTT.Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: properties)
+        let message = Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: properties)
         return self.publish(packet: PublishPacket(id: nextPacketId(), message: message))
     }
     /// Subscribe to topic
@@ -365,7 +363,7 @@ extension MQTT.Client.V5{
         authflow: Authflow? = nil
     ) -> Promise<Connack> {
         let publish = will.map {
-            MQTT.Message(
+            Message(
                 qos: .atMostOnce,
                 dup: false,
                 topic: $0.topic,

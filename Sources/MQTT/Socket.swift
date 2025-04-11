@@ -13,15 +13,15 @@ protocol SocketDelegate:AnyObject{
     func socket(_ socket:Socket,didReceive packet:Packet)
 }
 class Socket:@unchecked Sendable{
-    let endpoint:MQTT.Endpoint
+    let endpoint:Endpoint
     private var conn:NWConnection?
     private var header:UInt8 = 0
     private var length:Int = 0
     private var multiply = 1
-    private let config:MQTT.Config
+    private let config:Config
     private var cancelTask:Promise<Void>?
     weak var delegate:SocketDelegate?
-    init(endpoint:MQTT.Endpoint,config:MQTT.Config){
+    init(endpoint:Endpoint,config:Config){
         self.endpoint = endpoint
         self.config = config
     }
@@ -45,7 +45,7 @@ class Socket:@unchecked Sendable{
         let promise = Promise<Void>()
         conn.send(content: data,contentContext: .default(timeout: config.writingTimeout), completion: .contentProcessed({ error in
             if let error{
-                MQTT.Logger.error("SOCKET SEND: \(data.count) bytes failed. error:\(error)")
+                Logger.error("SOCKET SEND: \(data.count) bytes failed. error:\(error)")
                 promise.done(error)
             }else{
                 promise.done(())

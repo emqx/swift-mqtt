@@ -11,146 +11,147 @@ import Network
 /// Auth workflow
 public typealias Authflow = (@Sendable (Auth) -> Promise<Auth>)
 public protocol MQTTDelegate:AnyObject,Sendable{
-    func mqtt(_ mqtt: MQTT.Client, didUpdate status:MQTT.Status, prev :MQTT.Status)
-    func mqtt(_ mqtt: MQTT.Client, didReceive message:MQTT.Message)
-    func mqtt(_ mqtt: MQTT.Client, didReceive error:Error)
+    func mqtt(_ mqtt: MQTTClient, didUpdate status:Status, prev :Status)
+    func mqtt(_ mqtt: MQTTClient, didReceive message:Message)
+    func mqtt(_ mqtt: MQTTClient, didReceive error:Error)
 }
-extension MQTT{
-    open class Client:@unchecked Sendable{
-        ///client config
-        public let config:Config
-        /// readonly mqtt client connection status
-        /// mqtt client version
-        public var version:MQTT.Version { config.version }
-        /// readonly
-        public var isOpened:Bool { status == .opened }
-        /// network endpoint
-        public var endpoint:MQTT.Endpoint { socket.endpoint }
-        /// The delegate and observers callback queue
-        /// By default use internal socket queue.  change it for custom
-        public var delegateQueue:DispatchQueue
-        /// message delegate
-        public weak var delegate:MQTTDelegate?
-        internal let notify = NotificationCenter()
-        private let queue:DispatchQueue
-        //--- Keep safely by sharing a same status lock ---
-        private let safe = Safely()//status safe lock
-        private var socket:Socket
-        private var retrier:Retrier?
-        private var pinging:Pinging?
-        private var monitor:Monitor?
-        private var retrying:Bool = false
-        private var authflow:Authflow?
-        private var connPacket:ConnectPacket?
-        private var connParams:ConnectParams = .init()
-        //--- Keep safely themself ---
-        @Safely private var packetId:UInt16 = 0
-        @Safely private var connTask:Task?
-        @Safely private var authTask:Task?
-        @Safely private var pingTask:Task?
-        @Safely private var inflight:[UInt16:Packet] = [:]// inflight messages
-        @Safely private var activeTasks:[UInt16:Task] = [:] // active workflow tasks
-        @Safely private var passiveTasks:[UInt16:Task] = [:] // passive workflow tasks
-        
-        /// Initial mqtt  client object
-        ///
-        /// - Parameters:
-        ///   - clientID: Client Identifier
-        ///   - endpoint:The network endpoint
-        ///   - version: The mqtt client version
-        public init(_ clientId: String, endpoint:Endpoint,version:Version){
-            let config = Config(version, clientId: clientId)
-            let queue = DispatchQueue(label: "swift.mqtt.socket.queue",qos: .default,attributes: .concurrent)
-            self.socket = .init(endpoint: endpoint, config: config)
-            self.config = config
-            self.queue = queue
-            self.delegateQueue = queue
-            self.socket.delegate = self
-            self.pinging = Pinging(client: self)
-        }
-        deinit {
-            self.pinging?.cancel()
-            self.socket.cancel()
-        }
-        
-        /// Start the auto reconnect mechanism
-        ///
-        /// - Parameters:
-        ///    - policy: Retry policcy
-        ///    - limits: max retry times
-        ///    - filter: filter retry when some reason,  return `true` if retrying are not required
-        ///
-        public func startRetrier(_ policy:MQTT.Retrier.Policy = .exponential(),limits:UInt = 10,filter:MQTT.Retrier.Filter? = nil){
-            retrier = Retrier(policy, limits: limits, filter: filter)
-        }
-        ///  Stop the auto reconnect mechanism
-        public func stopRetrier(){
-            retrier = nil
-        }
-        /// Enable the network mornitor mechanism
-        ///
-        public func startMonitor(){
-            setMonitor(true)
-        }
-        /// Disable the network mornitor mechanism
-        ///
-        public func stopMonitor(){
-            setMonitor(false)
-        }
-        public var status:Status{
+open class MQTTClient:@unchecked Sendable{
+    ///client config
+    public let config:Config
+    /// readonly mqtt client connection status
+    /// mqtt client version
+    public var version:Version { config.version }
+    /// readonly
+    public var isOpened:Bool { status == .opened }
+    /// network endpoint
+    public var endpoint:Endpoint { socket.endpoint }
+    /// The delegate and observers callback queue
+    /// By default use internal socket queue.  change it for custom
+    public var delegateQueue:DispatchQueue
+    /// message delegate
+    public weak var delegate:MQTTDelegate?
+    internal let notify = NotificationCenter()
+    private let queue:DispatchQueue
+    //--- Keep safely by sharing a same status lock ---
+    private let safe = Safely()//status safe lock
+    private let socket:Socket
+    private var retrier:Retrier?
+    private var pinging:Pinging?
+    private var monitor:Monitor?
+    private var retrying:Bool = false
+    private var authflow:Authflow?
+    private var connPacket:ConnectPacket?
+    private var connParams:ConnectParams = .init()
+    //--- Keep safely themself ---
+    @Safely private var packetId:UInt16 = 0
+    @Safely private var connTask:MQTTTask?
+    @Safely private var authTask:MQTTTask?
+    @Safely private var pingTask:MQTTTask?
+    @Safely private var inflight:[UInt16:Packet] = [:]// inflight messages
+    @Safely private var activeTasks:[UInt16:MQTTTask] = [:] // active workflow tasks
+    @Safely private var passiveTasks:[UInt16:MQTTTask] = [:] // passive workflow tasks
+    
+    /// Initial mqtt  client object
+    ///
+    /// - Parameters:
+    ///   - clientID: Client Identifier
+    ///   - endpoint:The network endpoint
+    ///   - version: The mqtt client version
+    public init(_ clientId: String, endpoint:Endpoint,version:Version){
+        let config = Config(version, clientId: clientId)
+        let queue = DispatchQueue(label: "mqtt.socket.queue",qos: .default,attributes: .concurrent)
+        self.socket = .init(endpoint: endpoint, config: config)
+        self.config = config
+        self.queue = queue
+        self.delegateQueue = queue
+        self.socket.delegate = self
+        self.pinging = Pinging(client: self)
+    }
+    deinit {
+        self.pinging?.cancel()
+        self.socket.cancel()
+    }
+    
+    /// Start the auto reconnect mechanism
+    ///
+    /// - Parameters:
+    ///    - policy: Retry policcy
+    ///    - limits: max retry times
+    ///    - filter: filter retry when some reason,  return `true` if retrying are not required
+    ///
+    public func startRetrier(_ policy:Retrier.Policy = .exponential(),limits:UInt = 10,filter:Retrier.Filter? = nil){
+        retrier = Retrier(policy, limits: limits, filter: filter)
+    }
+    ///  Stop the auto reconnect mechanism
+    public func stopRetrier(){
+        retrier = nil
+    }
+    /// Enable the network mornitor mechanism
+    ///
+    public func startMonitor(){
+        setMonitor(true)
+    }
+    /// Disable the network mornitor mechanism
+    ///
+    public func stopMonitor(){
+        setMonitor(false)
+    }
+    /// current client status
+    public private(set) var status:Status{
+        get {
             safe.lock(); defer{ safe.unlock() }
             return _status
         }
-        private func setStatus(_ status:Status){
+        set {
             safe.lock();  defer{ safe.unlock() }
-            _status = status
+            _status = newValue
         }
-        private var _status:Status = .closed(){
-            didSet{
-                if oldValue != _status {
-                    MQTT.Logger.debug("StatusChanged: \(oldValue) --> \(_status)")
-                    switch _status{
-                    case .opened:
-                        retrier?.reset()
-                        pinging?.start()
-                    case .closed(let reason):
-                        MQTT.Logger.debug("CloseReason:\(reason.debugDescription)")
-                        retrier?.reset()
-                        pinging?.cancel()
-                        socket.cancel()
-                        if let task = self.connTask{
-                            switch reason{
-                            case .mqttError(let error):
-                                task.done(with: error)
-                            case .otherError(let error):
-                                task.done(with: error)
-                            case .networkError(let error):
-                                task.done(with: error)
-                            case .clientClose(let code):
-                                task.done(with: MQTTError.clientClose(code))
-                            case .serverClose(let code):
-                                task.done(with: MQTTError.serverClose(code))
-                            default:
-                                task.done(with:MQTTError.connectFailed())
-                            }
+    }
+    private var _status:Status = .closed(){
+        didSet{
+            if oldValue != _status {
+                Logger.debug("StatusChanged: \(oldValue) --> \(_status)")
+                switch _status{
+                case .opened:
+                    retrier?.reset()
+                    pinging?.start()
+                case .closed(let reason):
+                    Logger.debug("CloseReason:\(reason.debugDescription)")
+                    retrier?.reset()
+                    pinging?.cancel()
+                    socket.cancel()
+                    if let task = self.connTask{
+                        switch reason{
+                        case .mqttError(let error):
+                            task.done(with: error)
+                        case .otherError(let error):
+                            task.done(with: error)
+                        case .networkError(let error):
+                            task.done(with: error)
+                        case .clientClose(let code):
+                            task.done(with: MQTTError.clientClose(code))
+                        case .serverClose(let code):
+                            task.done(with: MQTTError.serverClose(code))
+                        default:
+                            task.done(with:MQTTError.connectFailed())
                         }
-                        connTask = nil
-                    case .opening:
-                        self.pinging?.cancel()
-                    case .closing:
-                        self.pinging?.cancel()
                     }
-                    self.notify(status: _status, old: oldValue)
+                    connTask = nil
+                case .opening:
+                    self.pinging?.cancel()
+                case .closing:
+                    self.pinging?.cancel()
                 }
+                self.notify(status: _status, old: oldValue)
             }
         }
     }
 }
 
-extension MQTT.Client{
+extension MQTTClient{
     /// Internal method run in delegate queue
     /// try close when no need retry
-    private func tryClose(reason:MQTT.CloseReason?){
+    private func tryClose(reason:CloseReason?){
         safe.lock(); defer{ safe.unlock() }
         if self.retrying{
             return
@@ -204,7 +205,7 @@ extension MQTT.Client{
         }
         self.retrying = true
         _status = .opening
-        MQTT.Logger.debug("Will reconect after \(delay) seconds")
+        Logger.debug("Will reconect after \(delay) seconds")
         self.queue.asyncAfter(deadline: .now() + delay){
             self.connect()
             self.retrying = false
@@ -220,7 +221,7 @@ extension MQTT.Client{
             switch packet {
             case let connack as ConnackPacket:
                 try self.processConnack(connack)
-                self.setStatus(.opened)
+                self.status = .opened
                 if connack.sessionPresent {
                     self.resendOnRestart()
                 } else {
@@ -231,7 +232,7 @@ extension MQTT.Client{
                 guard let authflow = self.authflow else { throw MQTTError.authflowRequired}
                 return self.processAuth(auth, authflow: authflow).then{ result in
                     if let packet = result as? ConnackPacket{
-                        self.setStatus(.opened)
+                        self.status = .opened
                         return packet
                     }
                     throw MQTTError.unexpectMessage
@@ -240,12 +241,12 @@ extension MQTT.Client{
                 throw MQTTError.unexpectMessage
             }
         }.catch { error in
-            self.setStatus(.closed(.init(error: error)))
+            self.status = .closed(.init(error: error))
         }
     }
 }
 // MARK: Ping Pong  Retry Monitor
-extension MQTT.Client{
+extension MQTTClient{
     private func monitorConnect(){
         safe.lock(); defer{ safe.unlock() }
         switch _status{
@@ -264,14 +265,14 @@ extension MQTT.Client{
         }
     }
     // monitor
-    private func newMonitor()->MQTT.Monitor{
-        let m = MQTT.Monitor{[weak self] new in
+    private func newMonitor()->Monitor{
+        let m = Monitor{[weak self] new in
             guard let self else { return }
             switch new{
             case .satisfied:
                 self.monitorConnect()
             case .unsatisfied:
-                self.setStatus(.closed(.unsatisfied))
+                self.status = .closed(.unsatisfied)
             default:
                 break
             }
@@ -293,11 +294,11 @@ extension MQTT.Client{
     }
 }
 
-extension MQTT.Client{
+extension MQTTClient{
     @discardableResult
     private func sendNoWait(_ packet: Packet)->Promise<Void> {
         do {
-            MQTT.Logger.debug("SEND: \(packet)")
+            Logger.debug("SEND: \(packet)")
             pinging?.update()
             var buffer = DataBuffer()
             try packet.write(version: config.version, to: &buffer)
@@ -310,7 +311,7 @@ extension MQTT.Client{
     }
     @discardableResult
     private func sendPacket(_ packet: Packet,timeout:TimeInterval? = nil)->Promise<Packet> {
-        let task = MQTT.Task()
+        let task = MQTTTask()
         switch packet.type{
         case .AUTH: /// send `AUTH` is active workflow but packetId is 0
             self.authTask = task
@@ -331,7 +332,7 @@ extension MQTT.Client{
             break
         }
         do {
-            MQTT.Logger.debug("SEND: \(packet)")
+            Logger.debug("SEND: \(packet)")
             var buffer = DataBuffer()
             try packet.write(version: config.version, to: &buffer)
             
@@ -346,9 +347,9 @@ extension MQTT.Client{
 }
 
 // MARK: Socket Delegate
-extension MQTT.Client:SocketDelegate{
+extension MQTTClient:SocketDelegate{
     func socket(_ socket: Socket, didReceive packet: any Packet) {
-        MQTT.Logger.debug("RECV: \(packet)")
+        Logger.debug("RECV: \(packet)")
         switch packet.type{
         //----------------------------------no need callback--------------------------------------------
         case .PINGRESP:
@@ -383,11 +384,11 @@ extension MQTT.Client:SocketDelegate{
         // ---------------------------at client we only send them never recv-------------------------------
         case .CONNECT, .SUBSCRIBE, .UNSUBSCRIBE:
             // MQTTError.unexpectedMessage
-            MQTT.Logger.error("Unexpected MQTT Message:\(packet)")
+            Logger.error("Unexpected MQTT Message:\(packet)")
         }
     }
     func socket(_ socket: Socket, didReceive error: any Error) {
-        MQTT.Logger.error("RECV: \(error)")
+        Logger.error("RECV: \(error)")
         self.clearAllTask(with: error)
         self.tryClose(reason: .init(error: error))
         self.notify(error: error)
@@ -494,7 +495,7 @@ extension MQTT.Client:SocketDelegate{
     }
 }
 //MARK: Core Implemention for OPEN/AUTH/CLOSE
-extension MQTT.Client{
+extension MQTTClient{
     func ping()->Promise<Void>{
         self.sendPacket(PingreqPacket(),timeout: config.pingTimeout).then { _ in }
     }
@@ -544,15 +545,15 @@ extension MQTT.Client{
             return .init(MQTTError.alreadyClosed)
         case .opening:
             self.socket.cancel().finally { _ in
-                self.setStatus(.closed(.mqttError(MQTTError.clientClose(code))))
+                self.status = .closed(.mqttError(MQTTError.clientClose(code)))
             }
             return .init(())
         case .opened:
-            self.setStatus(.closing)
+            self.status = .closing
             return self.sendNoWait(packet).map{ _ in
                 return self.socket.cancel()
             }.map { _ in
-                self.setStatus(.closed(.mqttError(MQTTError.clientClose(code))))
+                self.status = .closed(.mqttError(MQTTError.clientClose(code)))
                 return .success(())
             }
         }
@@ -653,7 +654,7 @@ extension MQTT.Client{
     }
 }
 //MARK: Core Implemention for PUB/SUB
-extension MQTT.Client {
+extension MQTTClient {
     func pubrel(packet: PubackPacket) -> Promise<Puback?> {
         guard case .opened = status else { return .init(MQTTError.unconnected) }
         self.$inflight.add(packet: packet)
@@ -772,14 +773,12 @@ extension MQTT.Client {
         }
     }
 }
-extension MQTT{
-    /// connection parameters. Limits set by either client or server
-    struct ConnectParams{
-        var maxQoS: MQTTQoS = .exactlyOnce
-        var maxPacketSize: Int?
-        var retainAvailable: Bool = true
-        var maxTopicAlias: UInt16 = 65535
-    }
+/// connection parameters. Limits set by either client or server
+struct ConnectParams{
+    var maxQoS: MQTTQoS = .exactlyOnce
+    var maxPacketSize: Int?
+    var retainAvailable: Bool = true
+    var maxTopicAlias: UInt16 = 65535
 }
 
 extension Safely where Value == [UInt16:Packet] {
