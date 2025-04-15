@@ -1,7 +1,7 @@
 # swift-mqtt
 ![Platform](https://img.shields.io/badge/platforms-iOS%2013.0%20%7C%20macOS%2010.15%20%7C%20tvOS%2013.0%20%7C%20watchOS%206.0-F28D00.svg)
 - An MQTT Client over TCP and QUIC protocol
-- QUIC protocol mark with `@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)`
+- QUIC protocol only available in `macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *`
 
 ## Why
 - We already have some mqtt clients available like [mqtt-nio](https://github.com/swift-server-community/mqtt-nio.git), [CocoaMQTT](https://github.com/emqx/CocoaMQTT.git) and so on, why do we write another one?
