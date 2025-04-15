@@ -62,13 +62,7 @@ class Observer{
 class Client:MQTTClient.V5,@unchecked Sendable{
     let observer = Observer()
     init() {
-        var options = TLSOptions()
-        options.trust = .trustAll
-        options.credential = try? .create(from: "", passwd: "")
-        options.serverName = "example.com"
-        options.minVersion = .v1_2
-        options.falseStartEnable = true
-        super.init(UUID().uuidString, endpoint: .quic(host: "172.16.2.7",tls: options))
+        super.init(UUID().uuidString, endpoint: .quic(host: "broker.emqx.io",tls: .trustAll()))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
         self.config.pingTimeout = 5

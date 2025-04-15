@@ -6,8 +6,8 @@
 //
 
 import Network
-import Foundation
 import Security
+import Foundation
 
 enum Prototype{ case ws,tcp,tls,wss,quic }
 
@@ -211,7 +211,7 @@ extension TLSOptions{
         /// trust all means not verify
         /// - Important: This setting is not secure and is usually only used as a test during the development phase
         case trustAll
-        /// Verify the self-signed root certificate
+        /// verify the self-signed root certificate
         case trustRoots([SecCertificate])
         /// custom verify logic
         case trustBlock(@Sendable (SecTrust)->Bool)

@@ -26,7 +26,7 @@ public struct Message: Sendable {
 
     /// MQTT v5 properties
     public let properties: Properties
-
+    
     init(qos: MQTTQoS, dup: Bool, topic: String, retain: Bool, payload: Data, properties: Properties) {
         self.qos = qos
         self.dup = dup
@@ -53,8 +53,8 @@ public struct Subscribe: Sendable {
     /// Retain handing
     public let retainHandling: RetainHandling
     public init(
-        topicFilter: String,
-        qos: MQTTQoS,
+        _ topicFilter: String,
+        qos: MQTTQoS = .atLeastOnce,
         noLocal: Bool = false,
         retainAsPublished: Bool = true,
         retainHandling: RetainHandling = .sendIfNew
@@ -80,7 +80,7 @@ public struct Subscribe: Sendable {
         public let topicFilter: String
         /// Quality of Service for subscription.
         public let qos: MQTTQoS
-        public init(topicFilter: String, qos: MQTTQoS) {
+        public init(_ topicFilter: String, qos: MQTTQoS) {
             self.qos = qos
             self.topicFilter = topicFilter
         }
