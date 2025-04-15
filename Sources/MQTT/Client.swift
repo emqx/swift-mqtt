@@ -10,6 +10,7 @@ import Network
 
 /// Auth workflow
 public typealias Authflow = (@Sendable (Auth) -> Promise<Auth>)
+
 public protocol MQTTDelegate:AnyObject,Sendable{
     func mqtt(_ mqtt: MQTTClient, didUpdate status:Status, prev :Status)
     func mqtt(_ mqtt: MQTTClient, didReceive message:Message)
@@ -30,7 +31,7 @@ open class MQTTClient:@unchecked Sendable{
     public var delegateQueue:DispatchQueue
     /// message delegate
     public weak var delegate:MQTTDelegate?
-    internal let notify = NotificationCenter()
+    private let notify = NotificationCenter()
     private let queue:DispatchQueue
     //--- Keep safely by sharing a same status lock ---
     private let safe = Safely()//status safe lock
@@ -796,6 +797,101 @@ extension Safely where Value == [UInt16:Packet] {
     func remove(id: UInt16) {
         self.write { pkgs in
             pkgs.removeValue(forKey: id)
+        }
+    }
+}
+//MARK: Delegate implmention
+public enum ObserverType:String,CaseIterable{
+    case error = "mqtt.observer.error"
+    case status = "mqtt.observer.status"
+    case message = "mqtt.observer.message"
+    var notifyName:Notification.Name{ .init(rawValue: rawValue) }
+}
+/// Quickly get mqtt parameters from the notification
+public extension Notification{
+    /// Parse mqtt message from `Notification` conveniently
+    func mqttMesaage()->(client:MQTTClient,message:Message)?{
+        guard let client = object as? MQTTClient else{
+            return nil
+        }
+        guard let message = userInfo?["message"] as? Message else{
+            return nil
+        }
+        return (client,message)
+    }
+    /// Parse mqtt status from `Notification` conveniently
+    func mqttStatus()->(client:MQTTClient,new:Status,old:Status)?{
+        guard let client = object as? MQTTClient else{
+            return nil
+        }
+        guard let new = userInfo?["new"] as? Status else{
+            return nil
+        }
+        guard let old = userInfo?["old"] as? Status else{
+            return nil
+        }
+        return (client,new,old)
+    }
+    /// Parse mqtt error from `Notification` conveniently
+    func mqttError()->(client:MQTTClient,error:Error)?{
+        guard let client = object as? MQTTClient else{
+            return nil
+        }
+        guard let error = userInfo?["error"] as? Error else{
+            return nil
+        }
+        return (client,error)
+    }
+}
+
+extension MQTTClient{
+    /// Add observer for some type
+    /// - Parameters:
+    ///    - observer:the observer
+    ///    - type: observer type
+    ///    - selector: callback selector
+    /// - Important:Note that this operation will strongly references `observer`. The observer must be removed when not in use. Don't add `self`. If really necessary please use `delegate`
+    public func addObserver(_ observer:Any,for type:ObserverType,selector:Selector){
+        notify.addObserver(observer, selector: selector, name: type.notifyName, object: self)
+    }
+    /// Remove some type of observer
+    public func removeObserver(_ observer:Any,for type:ObserverType){
+        notify.removeObserver(observer, name: type.notifyName, object: self)
+    }
+    /// Remove all types of observer
+    public func removeObserver(_ observer:Any){
+        ObserverType.allCases.forEach {
+            self.notify.removeObserver(observer, name: $0.notifyName, object: self)
+        }
+    }
+    func notify(message:Message){
+        guard let delegate = delegate else{
+            return
+        }
+        self.delegateQueue.async {
+            delegate.mqtt(self, didReceive: message)
+            let info = ["message":message]
+            self.notify.post(name: ObserverType.message.notifyName, object: self, userInfo: info)
+        }
+    }
+    func notify(error:Error){
+        guard let delegate = delegate else{
+            return
+        }
+        self.delegateQueue.async {
+            delegate.mqtt(self, didReceive: error)
+            let info:[String:Error] = ["error":error]
+            self.notify.post(name: ObserverType.error.notifyName, object: self, userInfo:info)
+        }
+    }
+    func notify(status:Status,old:Status){
+        guard let delegate = delegate else{
+            return
+        }
+        self.delegateQueue.async {
+            delegate.mqtt(self, didUpdate: status, prev: old)
+            let info:[String:Status] = ["old":old,"new":status]
+            self.notify.post(name: ObserverType.status.notifyName, object: self, userInfo: info)
         }
     }
 }
