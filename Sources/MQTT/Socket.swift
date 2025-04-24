@@ -1,5 +1,5 @@
 //
-//  Connection.swift
+//  Socket.swift
 //  swift-mqtt
 //
 //  Created by supertext on 2025/3/7.

@@ -79,13 +79,6 @@ public final class Config:@unchecked Sendable{
             assert(pingTimeout>0, "pingTimeout must be greater than zero!")
         }
     }
-    ///The max times the connection consecutive ping timeouts
-    /// It will take effect immediately
-    public var maxPingCount:UInt8 = 1{
-        didSet{
-            assert(maxPingCount>0, "maxPingCount must be greater than zero!")
-        }
-    }
     /// timeout second  for connecting to server
     /// - Important: This setting does not take effect in the quic protocol. In the quic protocol is fixed at 30s and cannot be modified
     /// - Note:Please set this value before client open, otherwise it will take effect on the next open

@@ -102,51 +102,47 @@ final class Monitor:@unchecked Sendable{
 final class Pinging:@unchecked Sendable{
     private let queue:DispatchQueue = .init(label: "mqtt.ping.queue")
     private let config:Config
-    private var tryCount:UInt8 = 0
-    private var lastTime:DispatchTime
-    private var item:DispatchWorkItem?
+    private var execTime:DispatchTime
+    private var worker:DispatchWorkItem?
     private weak var client:MQTTClient?
     init(client:MQTTClient){
-        lastTime = .now()
+        execTime = .now()
         config = client.config
         self.client = client
     }
     func start(){
         guard config.pingEnabled else { return }
-        guard item == nil else{ return }
-        tryCount = 0
-        lastTime = .now()
+        guard worker == nil else{ return }
+        execTime = .now()
         schedule()
     }
     func cancel(){
-        if item != nil{
-            item?.cancel()
-            item = nil
+        queue.async {
+            if self.worker != nil{
+                self.worker?.cancel()
+                self.worker = nil
+            }
         }
     }
     func update(){
-        lastTime = .now()
+        self.execTime = .now()
     }
     private func schedule(){
-        let item = DispatchWorkItem{[weak self] in
+        let worker = DispatchWorkItem{[weak self] in
             guard let self else{ return }
             guard let client = self.client else{ return }
-            if self.lastTime+TimeInterval(self.config.keepAlive) <= .now(){
-                client.ping().finally{result in
-                    if case .failure = result{
-                        self.tryCount += 1
-                        if self.tryCount >= self.config.maxPingCount{
-                            client.pingTimeout()
-                        }
-                    }
-                    self.update()
-                    self.schedule()
-                }
-            }else{
+            guard self.execTime+TimeInterval(self.config.keepAlive) <= .now() else{
                 self.schedule()
+                return
             }
+            client.ping().finally{result in
+                if case .failure = result{
+                    client.pingTimeout()
+                }
+            }
+            self.schedule()
         }
-        queue.asyncAfter(deadline: lastTime + TimeInterval(config.keepAlive), execute: item)
-        self.item = item
+        self.queue.asyncAfter(deadline: execTime + TimeInterval(config.keepAlive), execute: worker)
+        self.worker = worker
     }
 }

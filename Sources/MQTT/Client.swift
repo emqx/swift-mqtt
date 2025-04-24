@@ -303,9 +303,8 @@ extension MQTTClient{
             pinging?.update()
             var buffer = DataBuffer()
             try packet.write(version: config.version, to: &buffer)
-            return socket.send(data: buffer.data).then { _ in
-                self.pinging?.update()
-            }
+            self.pinging?.update()
+            return socket.send(data: buffer.data).then { _ in }
         } catch {
             return .init(error)
         }
@@ -336,9 +335,8 @@ extension MQTTClient{
             Logger.debug("SEND: \(packet)")
             var buffer = DataBuffer()
             try packet.write(version: config.version, to: &buffer)
-            
+            self.pinging?.update()
             return socket.send(data: buffer.data).then { _ in
-                self.pinging?.update()
                 return task.start(in: self.queue,timeout:timeout)
             }
         } catch {
