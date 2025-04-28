@@ -31,7 +31,9 @@ open class MQTTClient:@unchecked Sendable{
     public var delegateQueue:DispatchQueue
     /// message delegate
     public weak var delegate:MQTTDelegate?
-    private let notify = NotificationCenter()
+    /// auto create  when some observer has been added
+    private var notify:NotificationCenter?
+    /// internal network process queue
     private let queue:DispatchQueue
     //--- Keep safely by sharing a same status lock ---
     private let safe = Safely()//status safe lock
@@ -850,46 +852,46 @@ extension MQTTClient{
     ///    - selector: callback selector
     /// - Important:Note that this operation will strongly references `observer`. The observer must be removed when not in use. Don't add `self`. If really necessary please use `delegate`
     public func addObserver(_ observer:Any,for type:ObserverType,selector:Selector){
-        notify.addObserver(observer, selector: selector, name: type.notifyName, object: self)
+        if self.notify == nil {
+            self.notify = NotificationCenter()
+        }
+        notify?.addObserver(observer, selector: selector, name: type.notifyName, object: self)
     }
     /// Remove some type of observer
     public func removeObserver(_ observer:Any,for type:ObserverType){
-        notify.removeObserver(observer, name: type.notifyName, object: self)
+        notify?.removeObserver(observer, name: type.notifyName, object: self)
     }
     /// Remove all types of observer
     public func removeObserver(_ observer:Any){
         ObserverType.allCases.forEach {
-            self.notify.removeObserver(observer, name: $0.notifyName, object: self)
+            self.notify?.removeObserver(observer, name: $0.notifyName, object: self)
         }
     }
     func notify(message:Message){
-        guard let delegate = delegate else{
-            return
-        }
         self.delegateQueue.async {
-            delegate.mqtt(self, didReceive: message)
-            let info = ["message":message]
-            self.notify.post(name: ObserverType.message.notifyName, object: self, userInfo: info)
+            self.delegate?.mqtt(self, didReceive: message)
+            if let notify = self.notify{
+                let info = ["message":message]
+                notify.post(name: ObserverType.message.notifyName, object: self, userInfo: info)
+            }
         }
     }
     func notify(error:Error){
-        guard let delegate = delegate else{
-            return
-        }
         self.delegateQueue.async {
-            delegate.mqtt(self, didReceive: error)
-            let info:[String:Error] = ["error":error]
-            self.notify.post(name: ObserverType.error.notifyName, object: self, userInfo:info)
+            self.delegate?.mqtt(self, didReceive: error)
+            if let notify = self.notify{
+                let info:[String:Error] = ["error":error]
+                notify.post(name: ObserverType.error.notifyName, object: self, userInfo:info)
+            }
         }
     }
     func notify(status:Status,old:Status){
-        guard let delegate = delegate else{
-            return
-        }
         self.delegateQueue.async {
-            delegate.mqtt(self, didUpdate: status, prev: old)
-            let info:[String:Status] = ["old":old,"new":status]
-            self.notify.post(name: ObserverType.status.notifyName, object: self, userInfo: info)
+            if let notify = self.notify{
+                let info:[String:Status] = ["old":old,"new":status]
+                notify.post(name: ObserverType.status.notifyName, object: self, userInfo: info)
+            }
+            self.delegate?.mqtt(self, didUpdate: status, prev: old)
         }
     }
 }
