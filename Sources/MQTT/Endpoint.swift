@@ -70,9 +70,7 @@ public struct Endpoint:Sendable{
             let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
             let tcp = opt as! NWProtocolTCP.Options
             tcp.connectionTimeout = Int(config.connectTimeout)
-            let params = NWParameters(tls: nil, tcp: tcp)
-            params.allowFastOpen = true // allow fast open
-            return (endpoint,params)
+            return (endpoint,NWParameters(tls: nil, tcp: tcp))
         case .tls:
             let endpoint = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
             let tcp = opt as! NWProtocolTCP.Options
@@ -102,7 +100,6 @@ public struct Endpoint:Sendable{
             let wsOptions = NWProtocolWebSocket.Options()
             wsOptions.setSubprotocols(["mqtt"])
             params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
-            params.allowFastOpen = true // allow fast open
             return (endpoint,params)
         }
     }
