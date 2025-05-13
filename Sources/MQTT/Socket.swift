@@ -43,7 +43,7 @@ class Socket:@unchecked Sendable{
             return .init(MQTTError.unconnected)
         }
         let promise = Promise<Void>()
-        conn.send(content: data,contentContext: .default(timeout: config.writingTimeout), completion: .contentProcessed({ error in
+        conn.send(content: data,contentContext: context(timeout: config.writingTimeout), completion: .contentProcessed({ error in
             if let error{
                 Logger.error("SOCKET SEND: \(data.count) bytes failed. error:\(error)")
                 promise.done(error)
@@ -136,7 +136,6 @@ class Socket:@unchecked Sendable{
     private func dispath(data:Data){
         guard let type = PacketType(rawValue: header) ?? PacketType(rawValue: header & 0xF0) else {
             self.delegate?.socket(self, didReceive: MQTTError.decodeError(.unrecognisedPacketType))
-
             return
         }
         let incoming:IncomingPacket = .init(type: type, flags: self.header & 0xF, remainingData: .init(data: data))
@@ -171,10 +170,6 @@ class Socket:@unchecked Sendable{
     private func readMessage(){
         conn?.receiveMessage {[weak self] content, contentContext, isComplete, error in
             guard let self else{ return }
-            if isComplete{
-                self.delegate?.socket(self, didReceive: MQTTError.decodeError(.streamCompleted))
-                return
-            }
             if let error{
                 self.delegate?.socket(self, didReceive: error)
                 return
@@ -191,6 +186,7 @@ class Socket:@unchecked Sendable{
             }catch{
                 self.delegate?.socket(self, didReceive: error)
             }
+            self.readMessage()
         }
     }
     private func reset(){
@@ -198,9 +194,12 @@ class Socket:@unchecked Sendable{
         length = 0
         multiply = 1
     }
-}
-extension NWConnection.ContentContext{
-    static func `default`(timeout:TimeInterval)->NWConnection.ContentContext{
-        return .init(identifier: "swift-mqtt",expiration: .init(timeout*1000))
+    private func context(timeout:TimeInterval)->NWConnection.ContentContext{
+        switch self.endpoint.type{
+        case .ws,.wss:
+            return .init(identifier: "swift-mqtt",expiration: .init(timeout*1000),metadata: [NWProtocolWebSocket.Metadata(opcode: .binary)])
+        default:    
+            return .init(identifier: "swift-mqtt",expiration: .init(timeout*1000))
+        }
     }
 }
