@@ -8,6 +8,20 @@
 import Foundation
 import Network
 
+public struct Identity{
+    /// MQTT client id it will be send in `CONNECT` Packet
+    public internal(set) var clientId:String
+    /// MQTT client username it will be send in `CONNECT` Packet
+    public let username:String?
+    /// MQTT  client password it will be send in `CONNECT` Packet
+    public let password:String?
+    public init(_ clientId: String = UUID().uuidString, username: String? = nil, password: String? = nil) {
+        self.clientId = clientId
+        self.username = username
+        self.password = password
+    }
+}
+
 /// Auth workflow
 public typealias Authflow = (@Sendable (Auth) -> Promise<Auth>)
 
@@ -26,6 +40,8 @@ open class MQTTClient:@unchecked Sendable{
     public var isOpened:Bool { status == .opened }
     /// network endpoint
     public var endpoint:Endpoint { socket.endpoint }
+    /// current mqtt client identity . It  will be set affter `client.open(_ identity:)`
+    public internal(set)var identity:Identity?
     /// The delegate and observers callback queue
     /// By default use internal socket queue.  change it for custom
     public var delegateQueue:DispatchQueue
@@ -60,8 +76,8 @@ open class MQTTClient:@unchecked Sendable{
     ///   - clientID: Client Identifier
     ///   - endpoint:The network endpoint
     ///   - version: The mqtt client version
-    public init(_ clientId: String, endpoint:Endpoint,version:Version){
-        let config = Config(version, clientId: clientId)
+    public init(_ endpoint:Endpoint,version:Version){
+        let config = Config(version)
         let queue = DispatchQueue(label: "mqtt.socket.queue",qos: .default,attributes: .concurrent)
         self.socket = .init(endpoint: endpoint, config: config)
         self.config = config
@@ -635,7 +651,7 @@ extension MQTTClient{
                 self.config.keepAlive = keepAliveInterval
             // client identifier
             case .assignedClientIdentifier(let identifier):
-                self.config.clientId = identifier
+                self.identity?.clientId = identifier
             // max QoS
             case .maximumQoS(let qos):
                 self.connParams.maxQoS = qos
