@@ -54,14 +54,6 @@ public enum Version:Sendable{
 public final class Config:@unchecked Sendable{
     /// protocol version init in client
     public let version:Version
-    /// Version of MQTT server client is connecting to
-    public internal(set) var clientId: String
-    /// MQTT username.
-    /// - Note:Please set this value before client open, otherwise it will take effect on the next open
-    public var username: String? = nil
-    /// MQTT password.
-    /// - Note:Please set this value before client open, otherwise it will take effect on the next open
-    public var password: String? = nil
     /// MQTT keep alive period in second.
     /// It will take effect immediately
     public var keepAlive: UInt16 = 60{
@@ -101,9 +93,8 @@ public final class Config:@unchecked Sendable{
             assert(writingTimeout>0, "writingTimeout must be greater than zero!")
         }
     }
-    init(_ version:Version,clientId:String){
+    init(_ version:Version){
         self.version = version
-        self.clientId = clientId
     }
 }
 

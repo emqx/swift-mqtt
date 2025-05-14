@@ -12,10 +12,9 @@ extension MQTTClient{
         /// Initial v5 client object
         ///
         /// - Parameters:
-        ///   - clientID: Client Identifier
         ///   - endpoint:The network endpoint
-        public init(_ clientId: String, endpoint:Endpoint) {
-            super.init(clientId, endpoint: endpoint, version: .v5_0)
+        public init(_ endpoint:Endpoint) {
+            super.init(endpoint, version: .v5_0)
         }
     }
 }
@@ -124,6 +123,7 @@ extension MQTTClient.V5{
     ///
     @discardableResult
     public func open(
+        _  identity:Identity,
         will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool, properties: Properties)? = nil,
         cleanStart: Bool = true,
         properties: Properties = [],
@@ -139,15 +139,20 @@ extension MQTTClient.V5{
                 properties: $0.properties
             )
         }
+        var properties = properties
+        if cleanStart == false {
+            properties.append(.sessionExpiryInterval(0xFFFF_FFFF))
+        }
         let packet = ConnectPacket(
             cleanSession: cleanStart,
             keepAlive: config.keepAlive,
-            clientId: config.clientId,
-            username: config.username,
-            password: config.password,
+            clientId: identity.clientId,
+            username: identity.username,
+            password: identity.password,
             properties: properties,
             will: publish
         )
+        self.identity = identity
         return self.open(packet, authflow: authflow).then{ $0.ack() }
     }
     /// Close from server

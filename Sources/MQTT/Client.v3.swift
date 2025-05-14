@@ -12,10 +12,9 @@ extension MQTTClient{
         /// Initial v3 client object
         ///
         /// - Parameters:
-        ///   - clientID: Client Identifier
         ///   - endpoint:The network endpoint
-        public init(_ clientId: String, endpoint:Endpoint) {
-            super.init(clientId, endpoint: endpoint, version: .v3_1_1)
+        public init(_ endpoint:Endpoint) {
+            super.init(endpoint, version: .v3_1_1)
         }
     }
 }
@@ -45,7 +44,7 @@ extension MQTTClient.V3{
     /// - Returns: `Promise<Bool>` to be updated with whether server holds a session for this client
     ///
     @discardableResult
-    public func open( will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool)? = nil, cleanStart: Bool = true ) -> Promise<Bool> {
+    public func open(_ identity:Identity,will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool)? = nil, cleanStart: Bool = true ) -> Promise<Bool> {
         let message = will.map {
             Message(
                 qos: .atMostOnce,
@@ -56,19 +55,17 @@ extension MQTTClient.V3{
                 properties: []
             )
         }
-        var properties = Properties()
-        if self.config.version == .v5_0, cleanStart == false {
-            properties.append(.sessionExpiryInterval(0xFFFF_FFFF))
-        }
+        
         let packet = ConnectPacket(
             cleanSession: cleanStart,
             keepAlive: config.keepAlive,
-            clientId: config.clientId,
-            username: config.username,
-            password: config.password,
-            properties: properties,
+            clientId: identity.clientId,
+            username: identity.username,
+            password: identity.password,
+            properties: [],
             will: message
         )
+        self.identity = identity
         return self.open(packet).then(\.sessionPresent)
     }
 

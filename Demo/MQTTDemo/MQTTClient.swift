@@ -62,12 +62,10 @@ class Observer{
 class Client:MQTTClient.V5,@unchecked Sendable{
     let observer = Observer()
     init() {
-        super.init(UUID().uuidString, endpoint: .quic(host: "broker.emqx.io"))
+        super.init(.quic(host: "broker.emqx.io"))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
         self.config.pingTimeout = 5
-        self.config.username = "test"
-        self.config.password = "test"
         self.config.pingEnabled = true
         self.delegateQueue = .main
         /// start network monitor
