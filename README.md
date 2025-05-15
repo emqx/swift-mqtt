@@ -30,7 +30,7 @@ import PackageDescription
 let package = Package(
     name: "YOUR_PROJECT_NAME",
     dependencies: [
-        .package(url: "https://github.com/emqx/swift-mqtt.git", from: "0.2.1"),
+        .package(url: "https://github.com/emqx/swift-mqtt.git", from: "1.2.0"),
     ]
 )
 ```
@@ -73,12 +73,10 @@ class Client:MQTTClient.V5,@unchecked Sendable{
         options.serverName = "example.com"
         options.minVersion = .v1_2
         options.falseStartEnable = true
-        super.init(UUID().uuidString, endpoint: .quic(host: "172.16.2.7",tls: options))
+        super.init(.quic(host: "broker.emqx.io",tls: options))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
         self.config.pingTimeout = 5
-        self.config.username = "test"
-        self.config.password = "test"
         self.config.pingEnabled = true
         self.delegateQueue = .main
         /// start network monitor
@@ -123,8 +121,8 @@ extension Client:MQTTDelegate{
     }
 }
 
-
-client.open()
+let id = Identity(UUID().uuidString,username:"test",password:"test")
+client.open(id)
 client.close()
 client.subscribe(to:"topic")
 client.unsubscribe(from:"topic")
