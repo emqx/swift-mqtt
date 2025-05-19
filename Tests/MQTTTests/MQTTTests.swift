@@ -31,30 +31,18 @@ final class mqttTests: XCTestCase {
         return m
     }
 
-    func testSubscript() async throws {
+    func testMQTT() async throws {
         let mqtt = create()
         try await mqtt.open(id).wait()
         let ack = try await mqtt.subscribe(to: [.init("d/u/p/1234567"),.init("d/u/p/1231233")]).wait()
         XCTAssert(ack.codes.reduce(true, { prev, next in
             prev && (next.rawValue < 0x80)
         }))
-    }
-    func testQos0() async throws {
-        let mqtt = create()
-        try await mqtt.open(id).wait()
-        let ack = try await mqtt.publish(to: "d/u/p/1234567", payload: "Hello World",qos: .atMostOnce).wait()
-        XCTAssert(ack == nil)
-    }
-    func testQos1() async throws {
-        let mqtt = create()
-        try await mqtt.open(id).wait()
-        let ack = try await mqtt.publish(to: "d/u/p/1231233", payload: "Hello World",qos: .atLeastOnce).wait()
-        XCTAssert(ack!.code.rawValue < 0x80)
-    }
-    func testQos3() async throws {
-        let mqtt = create()
-        try await mqtt.open(id).wait()
-        let ack = try await mqtt.publish(to: "d/u/p/1231dfffd", payload: "Hello World",qos: .exactlyOnce).wait()
-        XCTAssert(ack!.code.rawValue < 0x80)
+        var puback = try await mqtt.publish(to: "d/u/p/1234567", payload: "Hello World",qos: .atMostOnce).wait()
+        XCTAssert(puback == nil)
+        puback = try await mqtt.publish(to: "d/u/p/1231233", payload: "Hello World",qos: .atLeastOnce).wait()
+        XCTAssert(puback!.code.rawValue < 0x80)
+        puback = try await mqtt.publish(to: "d/u/p/1231dfffd", payload: "Hello World",qos: .exactlyOnce).wait()
+        XCTAssert(puback!.code.rawValue < 0x80)
     }
 }

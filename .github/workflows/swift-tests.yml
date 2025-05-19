@@ -14,10 +14,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Download Swift development toolchain
-      run: |
-        curl -O https://download.swift.org/development/xcode/swift-DEVELOPMENT-SNAPSHOT-2024-03-19-a/swift-DEVELOPMENT-SNAPSHOT-2024-03-19-a-osx.pkg
-        sudo installer -pkg swift-DEVELOPMENT-SNAPSHOT-2024-03-19-a-osx.pkg -target /
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: 5.8
 
     - name: Build
       run: swift build -v
