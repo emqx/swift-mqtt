@@ -35,6 +35,13 @@ let package = Package(
 )
 ```
 
+## Contribution
+- We welcome any contribution to `swift-mqtt`.
+- See [Contributing](CONTRIBUTING.md) for more information on how to contribute.
+- If you find a bug, please create an issue.
+
+## License
+- `swift-mqtt` is available under the Apache 2.0 license. See the [LICENSE](LICENSE.md) file for more info.
 
 ## Usage
 ```swift
