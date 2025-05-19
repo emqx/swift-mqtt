@@ -1,6 +1,6 @@
 # swift-mqtt
 ![Platform](https://img.shields.io/badge/platforms-iOS%2013.0%20%7C%20macOS%2010.15%20%7C%20tvOS%2013.0%20%7C%20watchOS%206.0-F28D00.svg)
-- An MQTT Client over TCP and QUIC protocol
+- An MQTT Client over WebSocket and TCP and QUIC protocol
 - QUIC protocol only available in `macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *`
 
 ## Why
