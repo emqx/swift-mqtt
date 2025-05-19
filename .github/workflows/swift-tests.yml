@@ -1,0 +1,26 @@
+name: Swift Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download Swift development toolchain
+      run: |
+        curl -O https://download.swift.org/development/xcode/swift-DEVELOPMENT-SNAPSHOT-2024-03-19-a/swift-DEVELOPMENT-SNAPSHOT-2024-03-19-a-osx.pkg
+        sudo installer -pkg swift-DEVELOPMENT-SNAPSHOT-2024-03-19-a-osx.pkg -target /
+
+    - name: Build
+      run: swift build -v
+
+    - name: Run tests
+      run: swift test -v
