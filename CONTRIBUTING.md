@@ -1,6 +1,6 @@
 # Contributing to Swift-MQTT
 
-We welcome contributions! This guide explains how to effectively collaborate on our MQTT client implementation for Swift.
+You are welcome to submit any bugs, issues and feature requests on this repository. This guide explains how to effectively collaborate on our MQTT client implementation for Swift.
 
 ## 1. Code of Conduct
 
@@ -57,17 +57,17 @@ Types: feat, fix, docs, test, chore
 3. Code Standards
 
 • Swift-specific:
-
-// 2-space indentation
+```swift
+// 4-space indentation
 struct MQTTConfig {
-  let host: String
-  func connect() async throws {
-    guard isValid else { 
-      throw MQTTError.invalidConfig 
+    let host: String
+    func connect() async throws {
+        guard isValid else { 
+            throw MQTTError.invalidConfig 
+        }
     }
-  }
 }
-
+```
 
 • Avoid force unwrapping (!)
 
