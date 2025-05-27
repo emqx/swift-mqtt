@@ -22,7 +22,7 @@ public enum Status:Sendable,Hashable,CustomStringConvertible{
         case .opening: return "opening"
         case .closing: return "closing"
         case .opened:  return "opened"
-        case .closed: return "closed"
+        case .closed(let reason): return "closed:reason:\(reason?.description ?? "nil")"
         }
     }
     public func hash(into hasher: inout Hasher) {
@@ -56,13 +56,13 @@ public enum CloseReason:Sendable,CustomStringConvertible{
     case networkError(NWError)
     public var description: String{
         switch self{
-        case .unsatisfied: return "Unsatisfied"
-        case .pingTimeout: return "PingTimeout"
-        case .serverClose(let code): return "ServerClose(\(code))"
-        case .clientClose(let code): return "ClientClose(\(code))"
-        case .mqttError(let error): return "MQTTError(\(error))"
-        case .otherError(let error): return "OtherError(\(error))"
-        case .networkError(let error): return "NetworkError(\(error))"
+        case .unsatisfied: return "unsatisfied"
+        case .pingTimeout: return "pingTimeout"
+        case .serverClose(let code): return "serverClose.\(code)"
+        case .clientClose(let code): return "clientClose.\(code)"
+        case .mqttError(let error): return "\(error)"
+        case .otherError(let error): return "\(error)"
+        case .networkError(let error): return "\(error)"
         }
     }
     init(error:Error){

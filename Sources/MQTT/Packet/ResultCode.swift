@@ -133,7 +133,7 @@ import Foundation
 /// a failure. These are returned by CONNACK, PUBACK, PUBREC, PUBREL, PUBCOMP, DISCONNECT and
 /// AUTH packets
 ///
-public enum ResultCode:Sendable,Hashable{
+public enum ResultCode:Sendable,Hashable,CustomStringConvertible{
     case auth(Auth)
     case connectv3(ConnectV3)
     case connect(Connect)
@@ -141,6 +141,24 @@ public enum ResultCode:Sendable,Hashable{
     case puback(Puback)
     case suback(Suback)
     case unsuback(Unsuback)
+    public var description: String{
+        switch self {
+        case .auth(let auth):
+            return "\(auth)"
+        case .connectv3(let v3):
+            return "\(v3)"
+        case .connect(let connect):
+            return "\(connect)"
+        case .disconnect(let disconnect):
+            return "\(disconnect)"
+        case .puback(let puback):
+            return "\(puback)"
+        case .suback(let suback):
+            return "\(suback)"
+        case .unsuback(let unsuback):
+            return "\(unsuback)"
+        }
+    }
 }
 extension ResultCode{
     public enum Auth: UInt8,Sendable,Hashable {

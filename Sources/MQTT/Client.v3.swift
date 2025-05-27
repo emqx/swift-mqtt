@@ -36,8 +36,6 @@ extension MQTTClient.V3{
     /// MUST store the Session after the Client and Server are disconnected. If set to true then the Client
     /// and Server MUST discard any previous Session and start a new one
     ///
-    /// The function returns an EventLoopFuture which will be updated with whether the server has restored a session for this client.
-    ///
     /// - Parameters:
     ///   - will: Publish message to be posted as soon as connection is made
     ///   - cleanStart: should we start with a new session
@@ -112,7 +110,7 @@ extension MQTTClient.V3{
     @discardableResult
     public func subscribe(to topic: String,qos:MQTTQoS = .atLeastOnce) -> Promise<Suback> {
         let packet = SubscribePacket(id: nextPacketId(), properties: [],subscriptions: [.init(topic, qos: qos)])
-        return self.subscribe(packet: packet).then { try $0.suback() }
+        return self.subscribe(packet: packet).then { $0.suback() }
     }
     /// Subscribe to topic
     /// - Parameter subscriptions: Subscription infoszw
@@ -122,7 +120,7 @@ extension MQTTClient.V3{
     public func subscribe(to subscriptions: [Subscribe.V3]) -> Promise<Suback> {
         let subscriptions: [Subscribe] = subscriptions.map { .init($0.topicFilter, qos: $0.qos) }
         let packet = SubscribePacket(id: nextPacketId(), properties: [],subscriptions: subscriptions)
-        return self.subscribe(packet: packet).then { try $0.suback() }
+        return self.subscribe(packet: packet).then { $0.suback() }
     }
     /// Unsubscribe from topic
     /// - Parameter subscriptions: List of subscriptions to unsubscribe from

@@ -440,7 +440,6 @@ struct SubackPacket: Packet {
     let type: PacketType
     let retrunCodes: [UInt8]
     let properties: Properties
-    var description: String { "\(self.type)(id:\(id),codes:\(retrunCodes))" }
     private init(id: UInt16,type: PacketType, retrunCodes: [UInt8], properties: Properties = .init()) {
         self.id = id
         self.type = type
@@ -472,24 +471,35 @@ struct SubackPacket: Packet {
         }
         return 2
     }
-    func unsuback()throws->Unsuback{
-        let codes = try retrunCodes.compactMap { int in
-            if let code = ResultCode.Unsuback(rawValue: int){
-                return code
-            }
-            throw MQTTError.decodeError(.unexpectedTokens)
-        }
-        return Unsuback(codes: codes,properties: properties)
+    func unsuback()->Unsuback{
+        return Unsuback(codes: unsubackCodes,properties: properties)
     }
-    func suback()throws-> Suback{
-        let codes = try retrunCodes.compactMap { int in
-            if let code = ResultCode.Suback(rawValue: int){
-                return code
-            }
-            throw MQTTError.decodeError(.unexpectedTokens)
-        }
-        return Suback(codes: codes,properties: properties)
+    func suback()-> Suback{
+        return Suback(codes: subackCodes,properties: properties)
     }
+    private var subackCodes:[ResultCode.Suback]{
+        retrunCodes.compactMap { int in
+            ResultCode.Suback(rawValue: int)
+        }
+    }
+    private var unsubackCodes:[ResultCode.Unsuback]{
+        retrunCodes.compactMap { int in
+            ResultCode.Unsuback(rawValue: int)
+        }
+    }
+    var description: String {
+        switch self.type{
+        case .SUBACK:
+            let codes = subackCodes.map{ "\($0)" }.joined(separator: ",")
+            return "SUBACK(id:\(id),codes:[\(codes)])"
+        case .UNSUBACK:
+            let codes = unsubackCodes.map{ "\($0)" }.joined(separator: ",")
+            return "UNSUBACK(id:\(id),codes:[\(codes)])"
+        default:
+            return "\(self.type)(\(id))"
+        }
+    }
+
 }
 
 struct PingreqPacket: Packet {
@@ -565,7 +575,6 @@ struct DisconnectPacket: Packet {
 
 struct ConnackPacket: Packet {
     var type: PacketType { .CONNACK }
-    var description: String { "CONNACK(code:\(returnCode),flags:\(acknowledgeFlags))" }
     let returnCode: UInt8
     let acknowledgeFlags: UInt8
     let properties: Properties
@@ -594,6 +603,15 @@ struct ConnackPacket: Packet {
             properties: properties,
             sessionPresent: sessionPresent
         )
+    }
+    var description: String {
+        var code = "unknown"
+        if let connCode = ResultCode.Connect(rawValue: returnCode){
+            code = "\(connCode)"
+        }else if let connCode = ResultCode.ConnectV3(rawValue: returnCode){
+            code = "\(connCode)"
+        }
+        return "CONNACK(code:\(code),flags:\(acknowledgeFlags))"
     }
 }
 
