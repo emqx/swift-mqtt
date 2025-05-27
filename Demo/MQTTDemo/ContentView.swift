@@ -39,9 +39,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 25) {
                 Button("OPEN MQTT") {
                     let id = Identity("swift-mqtt", username: "test", password: "test")
-                    client.open(id).catch { err in
-                        print(err)
-                    }
+                    client.open(id)
                 }
                 Button("CLOSE MQTT") {
                     client.close().catch { err in

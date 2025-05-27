@@ -132,11 +132,10 @@ open class MQTTClient:@unchecked Sendable{
                 Logger.debug("StatusChanged: \(oldValue) --> \(_status)")
                 switch _status{
                 case .opened:
-                    retrier?.reset()
-                    pinging?.start()
+                    retrier?.cancel()
+                    pinging?.start(in: queue)
                 case .closed(let reason):
-                    Logger.debug("CloseReason:\(reason.debugDescription)")
-                    retrier?.reset()
+                    retrier?.cancel()
                     pinging?.cancel()
                     socket.cancel()
                     if let task = self.connTask{
@@ -209,7 +208,7 @@ extension MQTTClient{
             return
         }
         // not retry when limits or filter
-        guard let delay = retrier.retry(when: reason) else{
+        guard let delay = retrier.delay(when: reason) else{
             _status = .closed(reason)
             return
         }
@@ -224,8 +223,7 @@ extension MQTTClient{
         }
         self.retrying = true
         _status = .opening
-        Logger.debug("Will reconect after \(delay) seconds")
-        self.queue.asyncAfter(deadline: .now() + delay){
+        retrier.retry(in: queue,after: delay) {
             self.connect()
             self.retrying = false
         }
@@ -306,7 +304,7 @@ extension MQTTClient{
             return
         }
         let monitor = self.monitor ?? newMonitor()
-        monitor.start(queue: queue)
+        monitor.start(in: queue)
     }
     func pingTimeout(){
         tryClose(reason: .pingTimeout)

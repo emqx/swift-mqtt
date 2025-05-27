@@ -197,12 +197,48 @@ extension MQTTError{
         /// Read variable length overflow
         case varintOverflow
         /// Reader stream completed
-        case streamCompleted
+        case streamIsClosed
         /// Packet received contained invalid tokens
         case unexpectedTokens
         /// got unexpected data length when read
         case unexpectedDataLength
         /// Failed to recognise the packet control type
         case unrecognisedPacketType
+    }
+}
+extension MQTTError:CustomStringConvertible{
+    public var description: String{
+        switch self {
+        case .timeout:
+            return "MQTTError.timeout"
+        case .unconnected:
+            return "MQTTError.unconnected"
+        case .neverHappened:
+            return "MQTTError.neverHappened"
+        case .alreadyOpened:
+            return "MQTTError.alreadyOpened"
+        case .alreadyClosed:
+            return "MQTTError.alreadyClosed"
+        case .packetError(let packet):
+            return "MQTTError.packetError(\(packet))"
+        case .decodeError(let decode):
+            return "MQTTError.decodeError(\(decode))"
+        case .serverClose(let disconnect):
+            return "MQTTError.serverClose(\(disconnect))"
+        case .clientClose(let disconnect):
+            return "MQTTError.clientClose(\(disconnect))"
+        case .publishFailed(let puback):
+            return "MQTTError.publishFailed(\(puback))"
+        case .connectFailed(let resultCode):
+            return "MQTTError.connectFailed(\(resultCode == nil ? "nil" : "\(resultCode!)"))"
+        case .invalidCertData:
+            return "MQTTError.invalidCertData"
+        case .unexpectMessage:
+            return "MQTTError.unexpectMessage"
+        case .incompletePacket:
+            return "MQTTError.incompletePacket"
+        case .authflowRequired:
+            return "MQTTError.authflowRequired"
+        }
     }
 }

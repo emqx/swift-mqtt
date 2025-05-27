@@ -152,7 +152,7 @@ class Socket:@unchecked Sendable{
                 return
             }
             if isComplete{
-                self.delegate?.socket(self, didReceive: MQTTError.decodeError(.streamCompleted))
+                self.delegate?.socket(self, didReceive: MQTTError.decodeError(.streamIsClosed))
                 return
             }
             if let error{
@@ -161,7 +161,6 @@ class Socket:@unchecked Sendable{
             }
             guard let data = content,data.count == length else{
                 self.delegate?.socket(self, didReceive: MQTTError.decodeError(.unexpectedDataLength))
-
                 return
             }
             finish?(data)

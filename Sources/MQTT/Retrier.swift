@@ -42,18 +42,22 @@ public final class Retrier:@unchecked Sendable{
     ///    - policy:Retry policcy
     ///    - limits:max retry times
     ///    - filter:filter retry when some code and reasons
-    ///
+    private var delayItem:DispatchWorkItem?
     init(_ policy:Policy,limits:UInt,filter:Filter?){
         self.limits = limits
         self.policy = policy
         self.filter = filter
         self.times = 0
     }
-    func reset(){
+    func cancel(){
         self.times = 0
+        if let delayItem{
+            delayItem.cancel()
+            self.delayItem = nil
+        }
     }
     /// get retry delay. nil means don't retry
-    func retry(when reason:CloseReason) -> TimeInterval? {
+    func delay(when reason:CloseReason) -> TimeInterval? {
         if self.filter?(reason) == true {
             return nil
         }
@@ -71,6 +75,11 @@ public final class Retrier:@unchecked Sendable{
         case .exponential(let base, let scale,let max):
             return min(pow(Double(base),Double(times))*scale,max)
         }
+    }
+    func retry(in queue:DispatchQueue,after:TimeInterval,exec:@escaping ()->Void){
+        let item = DispatchWorkItem(block: exec)
+        self.delayItem = item
+        queue.asyncAfter(deadline: .now()+after, execute: item)
     }
 }
 final class Monitor:@unchecked Sendable{
@@ -90,7 +99,7 @@ final class Monitor:@unchecked Sendable{
             self.onChange?(status)
         }
     }
-    func start(queue:DispatchQueue){
+    func start(in queue:DispatchQueue){
         if impl.queue == nil{
             impl.start(queue: queue)
         }
@@ -100,7 +109,7 @@ final class Monitor:@unchecked Sendable{
     }
 }
 final class Pinging:@unchecked Sendable{
-    private let queue:DispatchQueue = .init(label: "mqtt.ping.queue")
+    private var queue:DispatchQueue?
     private let config:Config
     private var execTime:DispatchTime
     private var worker:DispatchWorkItem?
@@ -110,17 +119,23 @@ final class Pinging:@unchecked Sendable{
         config = client.config
         self.client = client
     }
-    func start(){
-        guard config.pingEnabled else { return }
-        guard worker == nil else{ return }
-        execTime = .now()
-        schedule()
+    func start(in queue:DispatchQueue){
+        guard self.config.pingEnabled else { return }
+        guard self.worker == nil else{ return }
+        guard self.queue == nil else{ return }
+        self.execTime = .now()
+        self.queue = queue
+        self.schedule()
     }
     func cancel(){
+        guard let queue else{
+            return
+        }
         queue.async {
             if self.worker != nil{
                 self.worker?.cancel()
                 self.worker = nil
+                self.queue = nil
             }
         }
     }
@@ -128,6 +143,9 @@ final class Pinging:@unchecked Sendable{
         self.execTime = .now()
     }
     private func schedule(){
+        guard let queue else{
+            return
+        }
         let worker = DispatchWorkItem{[weak self] in
             guard let self else{ return }
             guard let client = self.client else{ return }
@@ -142,7 +160,7 @@ final class Pinging:@unchecked Sendable{
             }
             self.schedule()
         }
-        self.queue.asyncAfter(deadline: execTime + TimeInterval(config.keepAlive), execute: worker)
         self.worker = worker
+        queue.asyncAfter(deadline: execTime + TimeInterval(config.keepAlive), execute: worker)
     }
 }

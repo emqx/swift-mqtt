@@ -77,7 +77,7 @@ extension MQTTClient.V5{
     @discardableResult
     public func subscribe(to subscriptions:[Subscribe],properties:Properties = [])->Promise<Suback>{
         let packet = SubscribePacket(id: nextPacketId(), properties: properties, subscriptions: subscriptions)
-        return self.subscribe(packet: packet).then { try $0.suback() }
+        return self.subscribe(packet: packet).then { $0.suback() }
     }
     
     /// Unsubscribe from topic
@@ -100,7 +100,7 @@ extension MQTTClient.V5{
     @discardableResult
     public func unsubscribe(from topics:[String],properties:Properties = []) -> Promise<Unsuback> {
         let packet = UnsubscribePacket(id: nextPacketId(), subscriptions: topics, properties: properties)
-        return self.unsubscribe(packet: packet).then { try $0.unsuback() }
+        return self.unsubscribe(packet: packet).then { $0.unsuback() }
     }
 
 
@@ -111,8 +111,6 @@ extension MQTTClient.V5{
     /// associated with the Client identifier the Server MUST create a new Session. The Client and Server
     /// MUST store the Session after the Client and Server are disconnected. If set to true then the
     /// Client and Server MUST discard any previous Session and start a new one
-    ///
-    /// The function returns an EventLoopFuture which will be updated with whether the server has restored a session for this client.
     ///
     /// - Parameters:
     ///   - will: Publish message to be posted as soon as connection is made
