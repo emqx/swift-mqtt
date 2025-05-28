@@ -64,8 +64,8 @@ public final class Config:@unchecked Sendable{
     /// enable `keepAlive`
     /// - Note:Please set this value before client open, otherwise it will take effect on the next open
     public var pingEnabled: Bool = true
-    /// timeout second for `keepAlive`
-    /// It will take effect at next ping request
+    /// It will take effect at next ping request.
+    /// The socket will auto reconnect when ping timeout
     public var pingTimeout: TimeInterval = 5{
         didSet{
             assert(pingTimeout>0, "pingTimeout must be greater than zero!")
@@ -107,12 +107,14 @@ class MQTTTask:@unchecked Sendable{
     func done(with packet: Packet){
         if self.promise.isDone{ return }
         self.promise.done(packet)
-        self.item?.cancel()
-        self.item = nil
+        self.cancelTimeout()
     }
     func done(with error: any Error){
         if self.promise.isDone{ return }
         self.promise.done(error)
+        self.cancelTimeout()
+    }
+    func cancelTimeout(){
         self.item?.cancel()
         self.item = nil
     }

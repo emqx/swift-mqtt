@@ -301,7 +301,7 @@ struct SubscribePacket: Packet {
         }
         // write payload
         for info in self.subscriptions {
-            try Serializer.writeString(info.topicFilter, to: &byteBuffer)
+            try Serializer.writeString(info.topic, to: &byteBuffer)
             switch version {
             case .v3_1_1:
                 byteBuffer.writeInteger(info.qos.rawValue)
@@ -330,7 +330,7 @@ struct SubscribePacket: Packet {
         }
         // payload
         return self.subscriptions.reduce(size) {
-            $0 + 2 + $1.topicFilter.utf8.count + 1 // topic filter length + topic filter + qos
+            $0 + 2 + $1.topic.utf8.count + 1 // topic filter length + topic filter + qos
         }
     }
 }

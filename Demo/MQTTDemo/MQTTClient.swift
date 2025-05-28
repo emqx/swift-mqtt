@@ -62,7 +62,7 @@ class Observer{
 class Client:MQTTClient.V5,@unchecked Sendable{
     let observer = Observer()
     init() {
-        super.init(.quic(host: "broker.emqx.io"))
+        super.init(.tls(host: "broker.emqx.io"))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
         self.config.pingTimeout = 5

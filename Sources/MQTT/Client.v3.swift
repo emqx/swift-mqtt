@@ -118,7 +118,7 @@ extension MQTTClient.V3{
     ///
     @discardableResult
     public func subscribe(to subscriptions: [Subscribe.V3]) -> Promise<Suback> {
-        let subscriptions: [Subscribe] = subscriptions.map { .init($0.topicFilter, qos: $0.qos) }
+        let subscriptions: [Subscribe] = subscriptions.map { .init($0.topic, qos: $0.qos) }
         let packet = SubscribePacket(id: nextPacketId(), properties: [],subscriptions: subscriptions)
         return self.subscribe(packet: packet).then { $0.suback() }
     }

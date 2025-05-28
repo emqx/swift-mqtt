@@ -13,35 +13,38 @@ protocol SocketDelegate:AnyObject{
     func socket(_ socket:Socket,didReceive packet:Packet)
 }
 class Socket:@unchecked Sendable{
-    let endpoint:Endpoint
-    private var conn:NWConnection?
+    private let config:Config
+    private let conn:NWConnection
+    private let isws:Bool
     private var header:UInt8 = 0
     private var length:Int = 0
     private var multiply = 1
-    private let config:Config
-    private var cancelTask:Promise<Void>?
     weak var delegate:SocketDelegate?
     init(endpoint:Endpoint,config:Config){
-        self.endpoint = endpoint
+        let params = endpoint.params(config: config)
+        self.conn = NWConnection(to: params.0, using: params.1)
         self.config = config
+        switch endpoint.type{
+        case .ws,.wss:
+            self.isws = true
+        default:
+            self.isws = false
+        }
+        conn.stateUpdateHandler = handle(state:)
     }
     func start(in queue:DispatchQueue){
-        let params = endpoint.params(config: config)
-        let conn = NWConnection(to: params.0, using: params.1)
-        conn.stateUpdateHandler = self.handle(state:)
+        guard conn.queue == nil else { return }
         conn.start(queue: queue)
-        self.conn = conn
-        switch self.endpoint.type{
-        case .ws,.wss:
+        if self.isws{
             self.readMessage()
-        default:
+        }else{
             self.readHeader()
         }
     }
+    func cancel(){
+        conn.cancel()
+    }
     func send(data:Data)->Promise<Void>{
-        guard let conn = self.conn else{
-            return .init(MQTTError.unconnected)
-        }
         let promise = Promise<Void>()
         conn.send(content: data,contentContext: context(timeout: config.writingTimeout), completion: .contentProcessed({ error in
             if let error{
@@ -53,28 +56,14 @@ class Socket:@unchecked Sendable{
         }))
         return promise
     }
-    @discardableResult
-    func cancel()->Promise<Void>{
-        guard self.cancelTask == nil else{
-            return .init(MQTTError.alreadyClosed)
-        }
-        guard let conn else{
-            return .init(MQTTError.alreadyClosed)
-        }
-        let promise = Promise<Void>()
-        self.cancelTask = promise
-        conn.cancel()
-        return promise
-    }
+    
     private func handle(state:NWConnection.State){
         switch state{
         case .cancelled:
             // This is the network telling us we're closed.
             // We don't need to actually do anything here
             // other than check our state is ok.
-            self.cancelTask?.done(())
-            self.cancelTask = nil
-            self.conn = nil
+            break
         case .failed(let error):
             // The connection has failed for some reason.
             self.delegate?.socket(self, didReceive: error)
@@ -147,7 +136,7 @@ class Socket:@unchecked Sendable{
         self.readHeader()
     }
     private func readData(_ length:Int,finish:(@Sendable (Data)->Void)?){
-        conn?.receive(minimumIncompleteLength: length, maximumLength: length, completion: {[weak self] content, contentContext, isComplete, error in
+        conn.receive(minimumIncompleteLength: length, maximumLength: length, completion: {[weak self] content, contentContext, isComplete, error in
             guard let self else{
                 return
             }
@@ -167,7 +156,7 @@ class Socket:@unchecked Sendable{
         })
     }
     private func readMessage(){
-        conn?.receiveMessage {[weak self] content, contentContext, isComplete, error in
+        conn.receiveMessage {[weak self] content, contentContext, isComplete, error in
             guard let self else{ return }
             if let error{
                 self.delegate?.socket(self, didReceive: error)
@@ -194,11 +183,9 @@ class Socket:@unchecked Sendable{
         multiply = 1
     }
     private func context(timeout:TimeInterval)->NWConnection.ContentContext{
-        switch self.endpoint.type{
-        case .ws,.wss:
+        if self.isws{
             return .init(identifier: "swift-mqtt",expiration: .init(timeout*1000),metadata: [NWProtocolWebSocket.Metadata(opcode: .binary)])
-        default:    
-            return .init(identifier: "swift-mqtt",expiration: .init(timeout*1000))
         }
+        return .init(identifier: "swift-mqtt",expiration: .init(timeout*1000))
     }
 }

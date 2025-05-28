@@ -42,10 +42,10 @@ public struct Message: Sendable {
 
 /// MQTT v5 `SUBSCRIBE` packet parameters.
 public struct Subscribe: Sendable {
-    /// Topic filter to subscribe to.
-    public let topicFilter: String
     /// Quality of Service for subscription.
     public let qos: MQTTQoS
+    /// Topic filter to subscribe to.
+    public let topic: String
     /// Don't forward message published by this client
     public let noLocal: Bool
     /// Keep retain flag message was published with
@@ -53,14 +53,14 @@ public struct Subscribe: Sendable {
     /// Retain handing
     public let retainHandling: RetainHandling
     public init(
-        _ topicFilter: String,
+        _ topic: String,
         qos: MQTTQoS = .atLeastOnce,
         noLocal: Bool = false,
         retainAsPublished: Bool = true,
         retainHandling: RetainHandling = .sendIfNew
     ) {
         self.qos = qos
-        self.topicFilter = topicFilter
+        self.topic = topic
         self.noLocal = noLocal
         self.retainAsPublished = retainAsPublished
         self.retainHandling = retainHandling
@@ -76,13 +76,13 @@ public struct Subscribe: Sendable {
     }
     /// MQTT v3 `SUBSCRIBE` packet parameters.
     public struct V3: Sendable {
-        /// Topic filter to subscribe to.
-        public let topicFilter: String
         /// Quality of Service for subscription.
         public let qos: MQTTQoS
-        public init(_ topicFilter: String, qos: MQTTQoS) {
+        /// Topic filter to subscribe to.
+        public let topic: String
+        public init(_ topic: String, qos: MQTTQoS) {
             self.qos = qos
-            self.topicFilter = topicFilter
+            self.topic = topic
         }
     }
 }
