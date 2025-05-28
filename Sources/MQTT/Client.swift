@@ -39,7 +39,7 @@ open class MQTTClient:@unchecked Sendable{
     /// readonly
     public var isOpened:Bool { status == .opened }
     /// network endpoint
-    public var endpoint:Endpoint { socket.endpoint }
+    public let endpoint:Endpoint
     /// current mqtt client identity . It  will be set affter `client.open(_ identity:)`
     public internal(set)var identity:Identity?
     /// The delegate and observers callback queue
@@ -53,10 +53,10 @@ open class MQTTClient:@unchecked Sendable{
     private let queue:DispatchQueue
     //--- Keep safely by sharing a same status lock ---
     private let safe = Safely()//status safe lock
-    private let socket:Socket
-    private var retrier:Retrier?
+    private var socket:Socket?
     private var pinging:Pinging?
-    private var monitor:Monitor?
+    private var retrier:Retrier?//not nil after startRetrier
+    private var monitor:Monitor?//not nil after startMonitor
     private var retrying:Bool = false
     private var authflow:Authflow?
     private var connPacket:ConnectPacket?
@@ -79,16 +79,14 @@ open class MQTTClient:@unchecked Sendable{
     public init(_ endpoint:Endpoint,version:Version){
         let config = Config(version)
         let queue = DispatchQueue(label: "mqtt.socket.queue",qos: .default,attributes: .concurrent)
-        self.socket = .init(endpoint: endpoint, config: config)
         self.config = config
         self.queue = queue
         self.delegateQueue = queue
-        self.socket.delegate = self
-        self.pinging = Pinging(client: self)
+        self.endpoint = endpoint
     }
     deinit {
+        self.closeSocket()
         self.pinging?.cancel()
-        self.socket.cancel()
     }
     
     /// Start the auto reconnect mechanism
@@ -129,15 +127,15 @@ open class MQTTClient:@unchecked Sendable{
     private var _status:Status = .closed(){
         didSet{
             if oldValue != _status {
-                Logger.debug("StatusChanged: \(oldValue) --> \(_status)")
+                Logger.debug("STATUS: \(oldValue) --> \(_status)")
                 switch _status{
                 case .opened:
+                    starPing()
                     retrier?.cancel()
-                    pinging?.start(in: queue)
                 case .closed(let reason):
+                    stopPing()
+                    closeSocket()
                     retrier?.cancel()
-                    pinging?.cancel()
-                    socket.cancel()
                     if let task = self.connTask{
                         switch reason{
                         case .mqttError(let error):
@@ -156,20 +154,28 @@ open class MQTTClient:@unchecked Sendable{
                     }
                     connTask = nil
                 case .opening:
-                    self.pinging?.cancel()
+                    stopPing()
                 case .closing:
-                    self.pinging?.cancel()
+                    stopPing()
                 }
-                self.notify(status: _status, old: oldValue)
+                notify(status: _status, old: oldValue)
             }
         }
     }
 }
 
 extension MQTTClient{
+    private func closeSocket(){
+        if let socket{
+            socket.cancel()
+            socket.delegate = nil
+            self.socket = nil
+        }
+    }
     /// Internal method run in delegate queue
     /// try close when no need retry
     private func tryClose(reason:CloseReason?){
+        Logger.debug("RETRY: START reason is \(reason == nil ? "nil" : reason!.description)")
         safe.lock(); defer{ safe.unlock() }
         if self.retrying{
             return
@@ -217,12 +223,15 @@ extension MQTTClient{
             _status = .closed(reason)
             return
         }
+        // close prev socket and prepare to reconnect
+        self.closeSocket()
         // not clean session when auto reconnection
         if connPacket.cleanSession{
             self.connPacket = connPacket.copyNotClean()
         }
         self.retrying = true
         _status = .opening
+        Logger.debug("RETRY: OK! will reconnect after \(delay) seconds")
         retrier.retry(in: queue,after: delay) {
             self.connect()
             self.retrying = false
@@ -233,7 +242,9 @@ extension MQTTClient{
         guard let packet = self.connPacket else{
             return .init(MQTTError.connectFailed())
         }
-        socket.start(in: queue)
+        socket = Socket(endpoint: endpoint,config: config)
+        socket?.delegate = self
+        socket?.start(in: queue)
         return self.sendPacket(packet).then { packet in
             switch packet {
             case let connack as ConnackPacket:
@@ -258,12 +269,21 @@ extension MQTTClient{
                 throw MQTTError.unexpectMessage
             }
         }.catch { error in
-            self.status = .closed(.init(error: error))
+            self.tryClose(reason: .init(error: error))
         }
     }
 }
 // MARK: Ping Pong  Retry Monitor
 extension MQTTClient{
+    func setMonitor(_ enable:Bool){
+        guard enable else{
+            self.monitor?.stop()
+            self.monitor = nil
+            return
+        }
+        let monitor = self.monitor ?? newMonitor()
+        monitor.start(in: queue)
+    }
     private func monitorConnect(){
         safe.lock(); defer{ safe.unlock() }
         switch _status{
@@ -297,14 +317,18 @@ extension MQTTClient{
         self.monitor = m
         return m
     }
-    func setMonitor(_ enable:Bool){
-        guard enable else{
-            self.monitor?.stop()
-            self.monitor = nil
-            return
+    
+    private func starPing(){
+        if config.pingEnabled{
+            pinging = Pinging(client: self)
+            pinging?.start(in: queue)
         }
-        let monitor = self.monitor ?? newMonitor()
-        monitor.start(in: queue)
+    }
+    private func stopPing(){
+        self.pinging?.cancel()
+        self.pingTask?.cancelTimeout()
+        self.pingTask = nil
+        self.pinging = nil
     }
     func pingTimeout(){
         tryClose(reason: .pingTimeout)
@@ -314,6 +338,7 @@ extension MQTTClient{
 extension MQTTClient{
     @discardableResult
     private func sendNoWait(_ packet: Packet)->Promise<Void> {
+        guard let socket else { return .init(MQTTError.unconnected) }
         do {
             Logger.debug("SEND: \(packet)")
             pinging?.update()
@@ -327,6 +352,7 @@ extension MQTTClient{
     }
     @discardableResult
     private func sendPacket(_ packet: Packet,timeout:TimeInterval? = nil)->Promise<Packet> {
+        guard let socket else { return .init(MQTTError.unconnected) }
         let task = MQTTTask()
         switch packet.type{
         case .AUTH: /// send `AUTH` is active workflow but packetId is 0
@@ -555,19 +581,16 @@ extension MQTTClient{
         case .v3_1_1:
             packet = .init(code: code)
         }
-        switch status{
+        safe.lock();defer { safe.unlock() }
+        switch _status{
         case .closing,.closed:
             return .init(MQTTError.alreadyClosed)
         case .opening:
-            self.socket.cancel().finally { _ in
-                self.status = .closed(.mqttError(MQTTError.clientClose(code)))
-            }
+            _status = .closed(.mqttError(MQTTError.clientClose(code)))
             return .init(())
         case .opened:
-            self.status = .closing
+            _status = .closing
             return self.sendNoWait(packet).map{ _ in
-                return self.socket.cancel()
-            }.map { _ in
                 self.status = .closed(.mqttError(MQTTError.clientClose(code)))
                 return .success(())
             }

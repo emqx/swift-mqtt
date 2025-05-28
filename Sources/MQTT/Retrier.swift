@@ -110,17 +110,16 @@ final class Monitor:@unchecked Sendable{
 }
 final class Pinging:@unchecked Sendable{
     private var queue:DispatchQueue?
-    private let config:Config
+    private let interval:TimeInterval
     private var execTime:DispatchTime
     private var worker:DispatchWorkItem?
     private weak var client:MQTTClient?
     init(client:MQTTClient){
         execTime = .now()
-        config = client.config
+        interval = TimeInterval(client.config.keepAlive)
         self.client = client
     }
     func start(in queue:DispatchQueue){
-        guard self.config.pingEnabled else { return }
         guard self.worker == nil else{ return }
         guard self.queue == nil else{ return }
         self.execTime = .now()
@@ -149,7 +148,7 @@ final class Pinging:@unchecked Sendable{
         let worker = DispatchWorkItem{[weak self] in
             guard let self else{ return }
             guard let client = self.client else{ return }
-            guard self.execTime+TimeInterval(self.config.keepAlive) <= .now() else{
+            guard self.execTime+self.interval <= .now() else{
                 self.schedule()
                 return
             }
@@ -161,6 +160,6 @@ final class Pinging:@unchecked Sendable{
             self.schedule()
         }
         self.worker = worker
-        queue.asyncAfter(deadline: execTime + TimeInterval(config.keepAlive), execute: worker)
+        queue.asyncAfter(deadline: self.execTime + self.interval, execute: worker)
     }
 }
