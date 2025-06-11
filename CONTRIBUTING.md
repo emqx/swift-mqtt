@@ -40,7 +40,7 @@ b. Pull Requests
 
   ◦ Updated documentation for API changes
 
-  ◦ Compatibility with Swift 5.9+
+  ◦ Compatibility with Swift 5.8+
 
 3. Commit message format:
 
@@ -52,7 +52,7 @@ b. Pull Requests
 Resolves #IssueNumber
 
 
-Types: feat, fix, docs, test, chore
+Types: ci,feat, fix, docs, test, chore
 
 3. Code Standards
 
