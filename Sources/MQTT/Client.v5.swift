@@ -113,6 +113,7 @@ extension MQTTClient.V5{
     /// Client and Server MUST discard any previous Session and start a new one
     ///
     /// - Parameters:
+    ///   - identity: The user identity to be pack into the `CONNECT` Packet
     ///   - will: Publish message to be posted as soon as connection is made
     ///   - cleanStart: should we start with a new session
     ///   - properties: properties to attach to connect message

@@ -37,6 +37,7 @@ extension MQTTClient.V3{
     /// and Server MUST discard any previous Session and start a new one
     ///
     /// - Parameters:
+    ///   - identity: The user identity to be pack into the `CONNECT` Packet
     ///   - will: Publish message to be posted as soon as connection is made
     ///   - cleanStart: should we start with a new session
     /// - Returns: `Promise<Bool>` to be updated with whether server holds a session for this client
