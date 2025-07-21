@@ -43,7 +43,7 @@ extension MQTTClient.V3{
     /// - Returns: `Promise<Bool>` to be updated with whether server holds a session for this client
     ///
     @discardableResult
-    public func open(_ identity:Identity,will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool)? = nil, cleanStart: Bool = true ) -> Promise<Bool> {
+    public func open(_ identity:Identity,will: (topic: String, payload: Data, retain: Bool)? = nil, cleanStart: Bool = true ) -> Promise<Bool> {
         let message = will.map {
             Message(
                 qos: .atMostOnce,

@@ -27,7 +27,7 @@ extension MQTTClient.V5{
     ///    - payload: Message payload
     ///    - qos: Quality of Service for message.
     ///    - retain: Whether this is a retained message.
-    ///    - properties: properties to attach to publish message
+    ///    - properties: properties to attach to publish message see ``Property.Publish``
     ///
     /// - Returns: `Promise<Puback?>` waiting for publish to complete.
     /// Depending on `QoS` setting the promise will complete  after message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are received.
@@ -44,7 +44,7 @@ extension MQTTClient.V5{
     ///    - payload: Message payload
     ///    - qos: Quality of Service for message.
     ///    - retain: Whether this is a retained message.
-    ///    - properties: properties to attach to publish message
+    ///    - properties: properties to attach to publish message see ``Property.Publish``
     ///
     /// - Returns: `Promise<Puback?>` waiting for publish to complete.
     /// Depending on `QoS` setting the promise will complete  after message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are received.
@@ -94,7 +94,7 @@ extension MQTTClient.V5{
     /// Unsubscribe from topic
     /// - Parameters:
     ///   - topics: List of topic to unsubscribe from
-    ///   - properties: properties to attach to unsubscribe message
+    ///   - properties: properties to attach to unsubscribe message  see``Property.Subsci``
     /// - Returns: `Promise<Unsuback>` waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
     ///     return its contents
     @discardableResult
@@ -114,16 +114,16 @@ extension MQTTClient.V5{
     ///
     /// - Parameters:
     ///   - identity: The user identity to be pack into the `CONNECT` Packet
-    ///   - will: Publish message to be posted as soon as connection is made
+    ///   - will: Publish message to be posted as soon as connection is made。 properties see ``Property.Publish``
     ///   - cleanStart: should we start with a new session
-    ///   - properties: properties to attach to connect message
+    ///   - properties: properties to attach to connect message. see ``Property.Connect``
     ///   - authflow: The authentication workflow. This is currently unimplemented.
     /// - Returns: `Promise<Connack>` to be updated with connack
     ///
     @discardableResult
     public func open(
         _  identity:Identity,
-        will: (topic: String, payload: Data, qos: MQTTQoS, retain: Bool, properties: Properties)? = nil,
+        will: (topic: String, payload: Data, retain: Bool, properties: Properties)? = nil,
         cleanStart: Bool = true,
         properties: Properties = [],
         authflow: Authflow? = nil
@@ -157,7 +157,7 @@ extension MQTTClient.V5{
     /// Close from server
     /// - Parameters:
     ///   - code: The close reason code send to the server
-    ///   - properties: The close properties send to the server
+    ///   - properties: The close properties send to the server. use ``Property.Connect``
     /// - Returns: `Promise<Void>` waiting on disconnect message to be sent
     ///
     @discardableResult
@@ -167,7 +167,7 @@ extension MQTTClient.V5{
     /// Re-authenticate with server
     ///
     /// - Parameters:
-    ///   - properties: properties to attach to auth packet. Must include `authenticationMethod`
+    ///   - properties: properties to attach to auth packet. Must include `authenticationMethod`, use ``Property.Auth``
     ///   - authflow: Respond to auth packets from server
     /// - Returns: `Promise<Auth>` final auth packet returned from server
     ///

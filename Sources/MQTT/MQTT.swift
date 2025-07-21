@@ -144,12 +144,6 @@ public enum MQTTError:Sendable,Hashable, Swift.Error {
     case timeout
     /// client in not connect to the broker
     case unconnected
-    /// never happen forever
-    case neverHappened
-    /// You called connect on a client that is already connected to the broker
-    case alreadyOpened
-    /// Client has already been closed
-    case alreadyClosed
     /// Encode of MQTT packet error or invalid paarameters
     case packetError(Packet)
     /// Decode of MQTT message failed
@@ -164,10 +158,16 @@ public enum MQTTError:Sendable,Hashable, Swift.Error {
     /// We received an unexpected message while connecting
     /// result code may be  `ResultCode.ConnectV3` or `ResultCode.Connect` or `nil`
     case connectFailed(ResultCode? = nil)
+    /// You called connect on a client that is already connected to the broker
+    case alreadyOpened
+    /// Client has already been closed
+    case alreadyClosed
+    /// Unexpected data packets were received
+    case unexpectPacket
+    /// Received unexpected message
+    case unexpectMessage
     /// Invalid  certificate data when import tls cert file
     case invalidCertData
-    /// The read stream has been completed
-    case unexpectMessage
     /// Packet error incomplete packet
     case incompletePacket
     /// Auth packets sent without authWorkflow being supplied
@@ -215,12 +215,6 @@ extension MQTTError:CustomStringConvertible{
             return "MQTTError.timeout"
         case .unconnected:
             return "MQTTError.unconnected"
-        case .neverHappened:
-            return "MQTTError.neverHappened"
-        case .alreadyOpened:
-            return "MQTTError.alreadyOpened"
-        case .alreadyClosed:
-            return "MQTTError.alreadyClosed"
         case .packetError(let packet):
             return "MQTTError.packetError(\(packet))"
         case .decodeError(let decode):
@@ -233,10 +227,16 @@ extension MQTTError:CustomStringConvertible{
             return "MQTTError.publishFailed(\(puback))"
         case .connectFailed(let resultCode):
             return "MQTTError.connectFailed(\(resultCode == nil ? "nil" : "\(resultCode!)"))"
-        case .invalidCertData:
-            return "MQTTError.invalidCertData"
+        case .alreadyOpened:
+            return "MQTTError.alreadyOpened"
+        case .alreadyClosed:
+            return "MQTTError.alreadyClosed"
+        case .unexpectPacket:
+            return "MQTTError.unexpectPacket"
         case .unexpectMessage:
             return "MQTTError.unexpectMessage"
+        case .invalidCertData:
+            return "MQTTError.invalidCertData"
         case .incompletePacket:
             return "MQTTError.incompletePacket"
         case .authflowRequired:

@@ -155,7 +155,7 @@ struct ConnectPacket: Packet {
 
     /// read connect packet from incoming packet (not implemented)
     static func read(version: Version, from: IncomingPacket) throws -> Self {
-        throw MQTTError.neverHappened
+        throw MQTTError.unexpectPacket
     }
 
     /// calculate size of connect packet
@@ -316,7 +316,7 @@ struct SubscribePacket: Packet {
     }
 
     static func read(version: Version, from packet: IncomingPacket) throws -> Self {
-        throw MQTTError.neverHappened
+        throw MQTTError.unexpectPacket
     }
 
     /// calculate size of subscribe packet
@@ -357,7 +357,7 @@ struct UnsubscribePacket: Packet {
     }
 
     static func read(version: Version, from packet: IncomingPacket) throws -> Self {
-        throw MQTTError.neverHappened
+        throw MQTTError.unexpectPacket
     }
 
     /// calculate size of subscribe packet
@@ -448,7 +448,7 @@ struct SubackPacket: Packet {
     }
 
     func write(version: Version, to byteBuffer: inout DataBuffer) throws {
-        throw MQTTError.neverHappened
+        throw MQTTError.unexpectPacket
     }
 
     static func read(version: Version, from packet: IncomingPacket) throws -> Self {
@@ -580,7 +580,7 @@ struct ConnackPacket: Packet {
     let properties: Properties
     var sessionPresent: Bool { self.acknowledgeFlags & 0x1 == 0x1 }
     func write(version: Version, to: inout DataBuffer) throws {
-        throw MQTTError.neverHappened
+        throw MQTTError.unexpectPacket
     }
     static func read(version: Version, from packet: IncomingPacket) throws -> Self {
         var remainingData = packet.remainingData
@@ -694,7 +694,7 @@ struct IncomingPacket {
         case .AUTH:
             return try AuthPacket.read(version: version, from: self)
         case .CONNECT,.SUBSCRIBE,.UNSUBSCRIBE:
-            throw MQTTError.neverHappened
+            throw MQTTError.unexpectPacket
         }
     }
 }
