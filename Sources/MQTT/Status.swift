@@ -9,10 +9,7 @@ import Foundation
 import Network
 
 /// state machine
-public enum Status:Sendable,Hashable,CustomStringConvertible{
-    public static func == (lhs: Status, rhs: Status) -> Bool {
-        lhs.hashValue == rhs.hashValue
-    }
+@frozen public enum Status:Sendable,Hashable,CustomStringConvertible{
     case opened
     case opening
     case closing
@@ -25,21 +22,9 @@ public enum Status:Sendable,Hashable,CustomStringConvertible{
         case .closed(let reason): return "closed:reason:\(reason?.description ?? "nil")"
         }
     }
-    public func hash(into hasher: inout Hasher) {
-        switch self {
-        case .opened:
-            0.hash(into: &hasher)
-        case .opening:
-            1.hash(into: &hasher)
-        case .closing:
-            2.hash(into: &hasher)
-        case .closed:
-            3.hash(into: &hasher)
-        }
-    }
 }
 ///  close reason
-public enum CloseReason:Sendable,CustomStringConvertible{
+@frozen public enum CloseReason:Sendable,Hashable,CustomStringConvertible{
     /// close when ping timeout
     case pingTimeout
     /// auto close by network monitor when network unsatisfied
@@ -75,8 +60,33 @@ public enum CloseReason:Sendable,CustomStringConvertible{
             self = .otherError(error)
         }
     }
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .pingTimeout:
+            hasher.combine(0)
+        case .unsatisfied:
+            hasher.combine(1)
+        case .serverClose(let disconnect):
+            hasher.combine(2)
+            hasher.combine(disconnect)
+        case .clientClose(let disconnect):
+            hasher.combine(3)
+            hasher.combine(disconnect)
+        case .mqttError(let mQTTError):
+            hasher.combine(4)
+            hasher.combine(mQTTError)
+        case .otherError(let error):
+            hasher.combine(5)
+            hasher.combine(error as NSError)
+        case .networkError(let nWError):
+            hasher.combine(6)
+            hasher.combine(nWError as NSError)
+        }
+    }
+    public static func == (lhs: CloseReason, rhs: CloseReason) -> Bool {
+        lhs.hashValue == rhs.hashValue
+    }
 }
-
 ///
 /// All explain for`NWError.tls(OSStatus)`
 ///
