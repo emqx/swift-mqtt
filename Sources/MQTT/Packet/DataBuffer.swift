@@ -83,15 +83,9 @@ struct DataBuffer:Sendable,Equatable{
     /// integer read and write
     @inlinable
     mutating func writeInteger<T: FixedWidthInteger>(_ integer: T,as: T.Type = T.self) {
-        var int = integer
-        var bytes:[UInt8] = []
-        let size = MemoryLayout<T>.size
-        for _ in 0..<size {
-            let b = UInt8(truncatingIfNeeded: int & 0xFF)
-            int = int >> 8
-            bytes.append(b)
-        }
-        self.data.append(contentsOf: bytes.reversed())
+        var int = integer.bigEndian
+        let data = Data(bytes: &int, count: MemoryLayout<T>.size)
+        self.data.append(data)
     }
     @inlinable
     mutating func readInteger<T: FixedWidthInteger>(as: T.Type = T.self) -> T? {

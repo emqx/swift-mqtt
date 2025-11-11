@@ -30,11 +30,13 @@ class Socket:@unchecked Sendable{
         default:
             self.isws = false
         }
-        conn.stateUpdateHandler = handle(state:)
+        conn.stateUpdateHandler = {[weak self] state in
+            self?.handle(state: state)
+        }
     }
-    func start(in queue:DispatchQueue){
+    func start(){
         guard conn.queue == nil else { return }
-        conn.start(queue: queue)
+        conn.start(queue: DispatchQueue(label: "mqtt.socket.queue"))
         if self.isws{
             self.readMessage()
         }else{
@@ -92,13 +94,16 @@ class Socket:@unchecked Sendable{
     
     private func readHeader(){
         self.reset()
-        self.readData(1) { result in
-            self.header = result[0]
-            self.readLength()
+        self.readData(1) {[weak self] result in
+            if let self{
+                self.header = result[0]
+                self.readLength()
+            }
         }
     }
     private func readLength(){
-        self.readData(1) { result in
+        self.readData(1) {[weak self] result in
+            guard let self else{ return }
             let byte = result[0]
             self.length += Int(byte & 0x7f) * self.multiply
             if byte & 0x80 != 0{
@@ -118,8 +123,8 @@ class Socket:@unchecked Sendable{
     }
     
     private func readPayload(){
-        self.readData(length) { data in
-            self.dispath(data: data)
+        self.readData(length) {[weak self] data in
+            self?.dispath(data: data)
         }
     }
     private func dispath(data:Data){

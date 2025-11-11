@@ -99,9 +99,9 @@ final class Monitor:@unchecked Sendable{
             self.onChange?(status)
         }
     }
-    func start(in queue:DispatchQueue){
+    func start(){
         if impl.queue == nil{
-            impl.start(queue: queue)
+            impl.start(queue: DispatchQueue(label: "mqtt.monitor.queue"))
         }
     }
     func stop(){
