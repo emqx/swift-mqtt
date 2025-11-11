@@ -78,7 +78,7 @@ open class MQTTClient:@unchecked Sendable{
     ///   - version: The mqtt client version
     public init(_ endpoint:Endpoint,version:Version){
         let config = Config(version)
-        let queue = DispatchQueue(label: "mqtt.socket.queue",qos: .default,attributes: .concurrent)
+        let queue = DispatchQueue(label: "mqtt.client.queue",qos: .default,attributes: .concurrent)
         self.config = config
         self.queue = queue
         self.delegateQueue = queue
@@ -244,7 +244,7 @@ extension MQTTClient{
         }
         socket = Socket(endpoint: endpoint,config: config)
         socket?.delegate = self
-        socket?.start(in: queue)
+        socket?.start()
         return self.sendPacket(packet).then { packet in
             switch packet {
             case let connack as ConnackPacket:
@@ -281,8 +281,19 @@ extension MQTTClient{
             self.monitor = nil
             return
         }
-        let monitor = self.monitor ?? newMonitor()
-        monitor.start(in: queue)
+        let monitor = self.monitor ?? Monitor{[weak self] new in
+            guard let self else { return }
+            switch new{
+            case .satisfied:
+                self.monitorConnect()
+            case .unsatisfied:
+                self.status = .closed(.unsatisfied)
+            default:
+                break
+            }
+        }
+        monitor.start()
+        self.monitor = monitor
     }
     private func monitorConnect(){
         safe.lock(); defer{ safe.unlock() }
@@ -300,22 +311,6 @@ extension MQTTClient{
             _status = .opening
             self.connect()
         }
-    }
-    // monitor
-    private func newMonitor()->Monitor{
-        let m = Monitor{[weak self] new in
-            guard let self else { return }
-            switch new{
-            case .satisfied:
-                self.monitorConnect()
-            case .unsatisfied:
-                self.status = .closed(.unsatisfied)
-            default:
-                break
-            }
-        }
-        self.monitor = m
-        return m
     }
     
     private func starPing(){
