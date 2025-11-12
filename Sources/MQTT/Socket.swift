@@ -47,6 +47,13 @@ class Socket:@unchecked Sendable{
         conn.cancel()
     }
     func send(data:Data)->Promise<Void>{
+        switch conn.state{
+        case .cancelled,.failed,.waiting:
+            //In this situation, sending data will result in a crash?
+            return Promise(MQTTError.unconnected)
+        default:
+            break
+        }
         let promise = Promise<Void>()
         conn.send(content: data,contentContext: .mqtt(isws), completion: .contentProcessed({ error in
             if let error{
