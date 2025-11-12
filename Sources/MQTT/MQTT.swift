@@ -86,13 +86,6 @@ public final class Config:@unchecked Sendable{
             assert(publishTimeout>0, "publishTimeout must be greater than zero!")
         }
     }
-    /// timeout second for write data to connection
-    /// It will take effect immediately
-    public var writingTimeout: TimeInterval = 5{
-        didSet{
-            assert(writingTimeout>0, "writingTimeout must be greater than zero!")
-        }
-    }
     init(_ version:Version){
         self.version = version
     }

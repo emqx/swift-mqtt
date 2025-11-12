@@ -6,12 +6,14 @@ import Network
 final class mqttTests: XCTestCase {
     let id = Identity("swift-mqtt-\(UInt.random(in:1..<10000))",username: "test",password: "test")
     func create()->MQTTClient.V5 {
-        let endpoint:Endpoint
+        var endpoint:Endpoint = .tls(host: "broker.emqx.io",tls: .trustAll())
         if #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) {
             endpoint = .quic(host: "broker.emqx.io",tls: .trustAll())
-        } else {
-            endpoint = .tls(host: "broker.emqx.io",tls: .trustAll())
         }
+        endpoint = .ws(host: "broker.emqx.io") /// use websocket
+        endpoint = .wss(host: "broker.emqx.io",tls: .trustAll()) /// use websocket over tls
+        endpoint = .tcp(host: "broker.emqx.io")
+        endpoint = .tls(host: "broker.emqx.io",tls: .trustAll()) /// use tls
         let m = MQTTClient.V5(endpoint)
         m.stopMonitor()
         m.startRetrier{reason in

@@ -54,7 +54,7 @@ public struct Endpoint:Sendable{
         headers:WSHeaders?=nil
     )->Endpoint{
         let nw = NWEndpoint.url(URL(string: "wss://\(host):\(port)\(path)")!)//if url is nil, crash is better
-        return .init(type: .wss,nw: nw,opt: opt,tls: nil,headers: headers)
+        return .init(type: .wss,nw: nw,opt: opt,tls: tls,headers: headers)
     }
     /// Create a `TCP`protocol endpoint
     /// - Parameters:
@@ -114,51 +114,49 @@ public struct Endpoint:Sendable{
                 }
                 tls?.update_sec_options(quic.securityProtocolOptions)
                 let params = NWParameters(quic: quic)
-                params.allowFastOpen = true // allow fast open
+                params.allowFastOpen = true //enable 0 rtt connection
                 return (nw,params)
             } else {
                 fatalError("Never happend")
             }
-        case .tcp:
-            let tcp = opt as! NWProtocolTCP.Options
-            tcp.connectionTimeout = Int(config.connectTimeout)
-            return (nw,NWParameters(tls: nil, tcp: tcp))
         case .tls:
-            let tcp = opt as! NWProtocolTCP.Options
-            tcp.connectionTimeout = Int(config.connectTimeout)
-            let tlsOptions = NWProtocolTLS.Options()
-            tls?.update_sec_options(tlsOptions.securityProtocolOptions)
-            let params = NWParameters(tls: tlsOptions, tcp: tcp)
-            params.allowFastOpen = true // allow fast open
-            return (nw,params)
+            return (nw,tlsParams(config.connectTimeout))
+        case .tcp:
+            return (nw,tcpParams(config.connectTimeout))
         case .wss:
-            let tcp = opt as! NWProtocolTCP.Options
-            tcp.connectionTimeout = Int(config.connectTimeout)
-            let tlsOptions = NWProtocolTLS.Options()
-            tls?.update_sec_options(tlsOptions.securityProtocolOptions)
-            let params = NWParameters(tls: tlsOptions, tcp: tcp)
-            let wsOptions = NWProtocolWebSocket.Options()
-            wsOptions.autoReplyPing = true
-            wsOptions.setSubprotocols(["mqtt"])
-            if let headers{
-                wsOptions.setAdditionalHeaders(headers)
-            }
-            params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
-            params.allowFastOpen = true // allow fast open
+            let params = tlsParams(config.connectTimeout)
+            params.defaultProtocolStack.applicationProtocols.insert(wsOptions(), at: 0)
             return (nw,params)
         case .ws:
-            let tcp = opt as! NWProtocolTCP.Options
-            tcp.connectionTimeout = Int(config.connectTimeout)
-            let params = NWParameters(tls: nil, tcp: tcp)
-            let wsOptions = NWProtocolWebSocket.Options()
-            wsOptions.autoReplyPing = true
-            wsOptions.setSubprotocols(["mqtt"])
-            if let headers{
-                wsOptions.setAdditionalHeaders(headers)
-            }
-            params.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
+            let params = tcpParams(config.connectTimeout)
+            params.defaultProtocolStack.applicationProtocols.insert(wsOptions(), at: 0)
             return (nw,params)
         }
+    }
+    private func tlsParams(_ timout:TimeInterval)->NWParameters{
+        let tcp = opt as! NWProtocolTCP.Options
+        tcp.connectionTimeout = Int(timout)
+        let tlsOptions = NWProtocolTLS.Options()
+        self.tls?.update_sec_options(tlsOptions.securityProtocolOptions)
+        tcp.enableFastOpen = true //enable 0 rtt connection
+        let params = NWParameters(tls: tlsOptions, tcp: tcp)
+        params.allowFastOpen = true //enable 0 rtt connection
+        return params
+        
+    }
+    private func tcpParams(_ timeout:TimeInterval)->NWParameters{
+        let tcp = opt as! NWProtocolTCP.Options
+        tcp.connectionTimeout = Int(timeout)
+        return NWParameters(tls: nil,tcp: tcp)
+    }
+    private func wsOptions()->NWProtocolWebSocket.Options{
+        let wsOptions = NWProtocolWebSocket.Options()
+        wsOptions.autoReplyPing = true
+        wsOptions.setSubprotocols(["mqtt"])
+        if let headers{
+            wsOptions.setAdditionalHeaders(headers)
+        }
+        return wsOptions
     }
 }
 
