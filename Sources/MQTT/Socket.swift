@@ -48,7 +48,7 @@ class Socket:@unchecked Sendable{
     }
     func send(data:Data)->Promise<Void>{
         let promise = Promise<Void>()
-        conn.send(content: data,contentContext: context(timeout: config.writingTimeout), completion: .contentProcessed({ error in
+        conn.send(content: data,contentContext: .mqtt(isws), completion: .contentProcessed({ error in
             if let error{
                 Logger.error("SOCKET SEND: \(data.count) bytes failed. error:\(error)")
                 promise.done(error)
@@ -187,10 +187,18 @@ class Socket:@unchecked Sendable{
         length = 0
         multiply = 1
     }
-    private func context(timeout:TimeInterval)->NWConnection.ContentContext{
-        if self.isws{
-            return .init(identifier: "swift-mqtt",expiration: .init(timeout*1000),metadata: [NWProtocolWebSocket.Metadata(opcode: .binary)])
+}
+extension NWConnection.ContentContext{
+    static func mqtt(_ isws:Bool)->NWConnection.ContentContext{
+        if isws{
+            return .wsMQTTContext
         }
-        return .init(identifier: "swift-mqtt",expiration: .init(timeout*1000))
+        return .mqttContext
     }
+    private static var mqttContext:NWConnection.ContentContext = {
+        return .init(identifier: "swift-mqtt")
+    }()
+    private static var wsMQTTContext:NWConnection.ContentContext = {
+        return .init(identifier: "swift-mqtt",metadata: [NWProtocolWebSocket.Metadata(opcode: .binary)])
+    }()
 }
