@@ -13,47 +13,50 @@ protocol SocketDelegate:AnyObject{
     func socket(_ socket:Socket,didReceive packet:Packet)
 }
 class Socket:@unchecked Sendable{
-    private let config:Config
-    private let conn:NWConnection
     private let isws:Bool
+    private let queue = DispatchQueue(label: "mqtt.socket.queue")
+    private let config:Config
     private var header:UInt8 = 0
     private var length:Int = 0
     private var multiply = 1
+    private let endpoint:Endpoint
+    @Safely private var conn:NWConnection?
     weak var delegate:SocketDelegate?
     init(endpoint:Endpoint,config:Config){
-        let params = endpoint.params(config: config)
-        self.conn = NWConnection(to: params.0, using: params.1)
         self.config = config
+        self.endpoint = endpoint
         switch endpoint.type{
         case .ws,.wss:
             self.isws = true
         default:
             self.isws = false
         }
-        conn.stateUpdateHandler = {[weak self] state in
-            self?.handle(state: state)
+    }
+    deinit{
+        stop()
+    }
+    func stop(){
+        self.$conn.write { conn in
+            conn?.cancel()
+            conn = nil
         }
     }
     func start(){
-        guard conn.queue == nil else { return }
-        conn.start(queue: DispatchQueue(label: "mqtt.socket.queue"))
-        if self.isws{
-            self.readMessage()
-        }else{
-            self.readHeader()
+        if let _ = conn?.queue{ return }
+        let params = endpoint.params(config: config)
+        conn = NWConnection.init(to: params.0, using: params.1)
+        conn?.stateUpdateHandler = {[weak self] state in
+            self?.handle(state: state)
         }
-    }
-    func cancel(){
-        conn.cancel()
+        conn?.start(queue: queue)
+        if isws{
+            readMessage()
+        }else{
+            readHeader()
+        }
     }
     func send(data:Data)->Promise<Void>{
-        switch conn.state{
-        case .cancelled,.failed,.waiting:
-            //In this situation, sending data will result in a crash?
-            return Promise(MQTTError.unconnected)
-        default:
-            break
-        }
+        guard let conn else{ return  Promise(MQTTError.unconnected) }
         let promise = Promise<Void>()
         conn.send(content: data,contentContext: .mqtt(isws), completion: .contentProcessed({ error in
             if let error{
@@ -148,6 +151,7 @@ class Socket:@unchecked Sendable{
         self.readHeader()
     }
     private func readData(_ length:Int,finish:(@Sendable (Data)->Void)?){
+        guard let conn else { return }
         conn.receive(minimumIncompleteLength: length, maximumLength: length, completion: {[weak self] content, contentContext, isComplete, error in
             guard let self else{
                 return
@@ -168,6 +172,7 @@ class Socket:@unchecked Sendable{
         })
     }
     private func readMessage(){
+        guard let conn else { return }
         conn.receiveMessage {[weak self] content, contentContext, isComplete, error in
             guard let self else{ return }
             if let error{
