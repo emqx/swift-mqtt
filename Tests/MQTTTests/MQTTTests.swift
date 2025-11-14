@@ -47,4 +47,12 @@ final class mqttTests: XCTestCase {
         puback = try await mqtt.publish(to: "d/u/p/1231dfffd", payload: "Hello World",qos: .exactlyOnce).wait()
         XCTAssert(puback!.code.rawValue < 0x80)
     }
+    func testSocket(){
+        let endpoint:Endpoint = .tls(host: "broker.emqx.io",tls: .trustAll())
+        let socket = Socket(endpoint: endpoint, config: Config(.v5_0))
+        socket.start()
+        socket.stop()
+       _ =  socket.send(data: Data())
+        sleep(5)
+    }
 }

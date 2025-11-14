@@ -49,7 +49,7 @@ public final class Retrier:@unchecked Sendable{
         self.filter = filter
         self.times = 0
     }
-    func cancel(){
+    func stop(){
         self.times = 0
         if let delayItem{
             delayItem.cancel()
@@ -126,7 +126,7 @@ final class Pinging:@unchecked Sendable{
         self.queue = queue
         self.schedule()
     }
-    func cancel(){
+    func stop(){
         guard let queue else{
             return
         }
