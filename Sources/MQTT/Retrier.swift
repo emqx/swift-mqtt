@@ -109,7 +109,7 @@ final class Monitor:@unchecked Sendable{
     }
 }
 final class Pinging:@unchecked Sendable{
-    private var queue:DispatchQueue?
+    private let queue:DispatchQueue = .init(label: "mqtt.pingpong.queue")
     private let interval:TimeInterval
     private var execTime:DispatchTime
     private var worker:DispatchWorkItem?
@@ -119,32 +119,21 @@ final class Pinging:@unchecked Sendable{
         interval = TimeInterval(client.config.keepAlive)
         self.client = client
     }
-    func start(in queue:DispatchQueue){
+    func start(){
         guard self.worker == nil else{ return }
-        guard self.queue == nil else{ return }
         self.execTime = .now()
-        self.queue = queue
         self.schedule()
     }
     func stop(){
-        guard let queue else{
-            return
-        }
-        queue.async {
-            if self.worker != nil{
-                self.worker?.cancel()
-                self.worker = nil
-                self.queue = nil
-            }
+        if self.worker != nil{
+            self.worker?.cancel()
+            self.worker = nil
         }
     }
     func update(){
         self.execTime = .now()
     }
     private func schedule(){
-        guard let queue else{
-            return
-        }
         let worker = DispatchWorkItem{[weak self] in
             guard let self else{ return }
             guard let client = self.client else{ return }
@@ -160,6 +149,6 @@ final class Pinging:@unchecked Sendable{
             self.schedule()
         }
         self.worker = worker
-        queue.asyncAfter(deadline: self.execTime + self.interval, execute: worker)
+        queue.asyncAfter(deadline: execTime + interval, execute: worker)
     }
 }

@@ -90,7 +90,6 @@ open class MQTTClient:@unchecked Sendable{
         retrier?.stop()
         monitor?.stop()
         stopPing()
-        socket.stop()
     }
     
     /// Start the auto reconnect mechanism
@@ -314,7 +313,7 @@ extension MQTTClient{
     private func starPing(){
         if config.pingEnabled{
             pinging = Pinging(client: self)
-            pinging?.start(in: queue)
+            pinging?.start()
         }
     }
     private func stopPing(){
@@ -903,7 +902,7 @@ extension MQTTClient{
             self.delegate?.mqtt(self, didReceive: message)
             guard let notify = self.notify else{ return }
             let info:[String:Message] = ["message":message]
-            self.notify?.post(name: ObserverType.message.notifyName, object: self, userInfo: info)
+            notify.post(name: ObserverType.message.notifyName, object: self, userInfo: info)
         }
     }
     func notify(error:Error){
