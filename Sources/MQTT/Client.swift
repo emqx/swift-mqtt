@@ -130,40 +130,41 @@ open class MQTTClient:@unchecked Sendable{
     }
     private var _status:Status = .closed(){
         didSet{
-            if oldValue != _status {
-                Logger.debug("STATUS: \(oldValue) --> \(_status)")
-                switch _status{
-                case .opened:
-                    starPing()
-                    retrier?.stop()
-                case .closed(let reason):
-                    socket.stop()
-                    stopPing()
-                    retrier?.stop()
-                    if let task = self.connTask{
-                        switch reason{
-                        case .mqttError(let error):
-                            task.done(with: error)
-                        case .otherError(let error):
-                            task.done(with: error)
-                        case .networkError(let error):
-                            task.done(with: error)
-                        case .clientClose(let code):
-                            task.done(with: MQTTError.clientClose(code))
-                        case .serverClose(let code):
-                            task.done(with: MQTTError.serverClose(code))
-                        default:
-                            task.done(with:MQTTError.connectFailed())
-                        }
-                    }
-                    connTask = nil
-                case .opening:
-                    stopPing()
-                case .closing:
-                    stopPing()
-                }
+            if oldValue == _status { return }
+            Logger.debug("STATUS: \(oldValue) --> \(_status)")
+            defer{
                 notify(status: _status, old: oldValue)
             }
+            switch _status{
+            case .opened:
+                starPing()
+                retrier?.stop()
+            case .opening:
+                stopPing()
+            case .closing:
+                stopPing()
+            case .closed(let reason):
+                socket.stop()
+                stopPing()
+                retrier?.stop()
+                guard let task = self.connTask else{ return }
+                switch reason{
+                case .mqttError(let error):
+                    task.done(with: error)
+                case .otherError(let error):
+                    task.done(with: error)
+                case .networkError(let error):
+                    task.done(with: error)
+                case .clientClose(let code):
+                    task.done(with: MQTTError.clientClose(code))
+                case .serverClose(let code):
+                    task.done(with: MQTTError.serverClose(code))
+                default:
+                    task.done(with:MQTTError.connectFailed())
+                }
+                connTask = nil
+            }
+            
         }
     }
 }
@@ -897,30 +898,30 @@ extension MQTTClient{
         }
     }
     func notify(message:Message){
-        self.delegateQueue.async {
+        self.delegateQueue.async {[weak self] in
+            guard let self else { return }
             self.delegate?.mqtt(self, didReceive: message)
-            if let notify = self.notify{
-                let info = ["message":message]
-                notify.post(name: ObserverType.message.notifyName, object: self, userInfo: info)
-            }
+            guard let notify = self.notify else{ return }
+            let info:[String:Message] = ["message":message]
+            self.notify?.post(name: ObserverType.message.notifyName, object: self, userInfo: info)
         }
     }
     func notify(error:Error){
-        self.delegateQueue.async {
+        self.delegateQueue.async {[weak self] in
+            guard let self else { return }
             self.delegate?.mqtt(self, didReceive: error)
-            if let notify = self.notify{
-                let info:[String:Error] = ["error":error]
-                notify.post(name: ObserverType.error.notifyName, object: self, userInfo:info)
-            }
+            guard let notify = self.notify else{ return }
+            let info:[String:Error] = ["error":error]
+            notify.post(name: ObserverType.error.notifyName, object: self, userInfo:info)
         }
     }
     func notify(status:Status,old:Status){
-        self.delegateQueue.async {
-            if let notify = self.notify{
-                let info:[String:Status] = ["old":old,"new":status]
-                notify.post(name: ObserverType.status.notifyName, object: self, userInfo: info)
-            }
+        self.delegateQueue.async {[weak self] in
+            guard let self else { return }
             self.delegate?.mqtt(self, didUpdate: status, prev: old)
+            guard let notify = self.notify else{ return }
+            let info:[String:Status] = ["old":old,"new":status]
+            notify.post(name: ObserverType.status.notifyName, object: self, userInfo: info)
         }
     }
 }

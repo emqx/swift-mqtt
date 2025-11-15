@@ -13,7 +13,6 @@ protocol SocketDelegate:AnyObject{
     func socket(_ socket:Socket,didReceive packet:Packet)
 }
 class Socket:@unchecked Sendable{
-    private let isws:Bool
     private let queue = DispatchQueue(label: "mqtt.socket.queue")
     private let config:Config
     private var header:UInt8 = 0
@@ -25,12 +24,6 @@ class Socket:@unchecked Sendable{
     init(endpoint:Endpoint,config:Config){
         self.config = config
         self.endpoint = endpoint
-        switch endpoint.type{
-        case .ws,.wss:
-            self.isws = true
-        default:
-            self.isws = false
-        }
     }
     deinit{
         stop()
@@ -198,6 +191,14 @@ class Socket:@unchecked Sendable{
         header = 0
         length = 0
         multiply = 1
+    }
+    private var isws:Bool{
+        switch endpoint.type{
+        case.ws,.wss:
+            return true
+        default:
+            return false
+        }
     }
 }
 extension NWConnection.ContentContext{

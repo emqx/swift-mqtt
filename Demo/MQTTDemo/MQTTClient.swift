@@ -9,7 +9,7 @@ import MQTT
 import Foundation
 
 enum Logger:Sendable{
-    nonisolated(unsafe) public static var level:Level = .error
+    nonisolated(unsafe) public static var level:Level = .info
     private static func log(_ level: Level, message: String) {
         guard level.rawValue >= self.level.rawValue else { return }
         print("APP(\(level)): \(message)")
