@@ -149,18 +149,16 @@ class Socket:@unchecked Sendable{
             guard let self else{
                 return
             }
-            if isComplete{
-                self.delegate?.socket(self, didReceive: MQTTError.decodeError(.streamIsClosed))
-                return
-            }
             if let error{
                 self.delegate?.socket(self, didReceive: error)
                 return
             }
             guard let data = content,data.count == length else{
-                self.delegate?.socket(self, didReceive: MQTTError.decodeError(.unexpectedDataLength))
+                let code:MQTTError.Decode = isComplete ? .streamIsComplete : .unexpectedDataLength
+                self.delegate?.socket(self, didReceive: MQTTError.decodeError(code))
                 return
             }
+            // if we get correct data,we dispatch it! even if the stream has already been completed.
             finish?(data)
         })
     }

@@ -192,10 +192,10 @@ extension MQTTError{
         /// Read variable length overflow
         case varintOverflow
         /// Reader stream completed
-        case streamIsClosed
+        case streamIsComplete
         /// Packet received contained invalid tokens
         case unexpectedTokens
-        /// got unexpected data length when read
+        /// got unexpected data length when decoder read
         case unexpectedDataLength
         /// Failed to recognise the packet control type
         case unrecognisedPacketType
