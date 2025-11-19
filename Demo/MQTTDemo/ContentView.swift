@@ -38,8 +38,7 @@ struct ContentView: View {
         NavigationView {
             VStack(alignment: .leading, spacing: 25) {
                 Button("OPEN MQTT") {
-                    let id = Identity("swift-mqtt", username: "test", password: "test")
-                    client.open(id)
+                    client.start()
                 }
                 Button("CLOSE MQTT") {
                     client.close().catch { err in

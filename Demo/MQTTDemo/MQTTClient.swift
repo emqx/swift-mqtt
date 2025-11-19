@@ -9,7 +9,7 @@ import MQTT
 import Foundation
 
 enum Logger:Sendable{
-    nonisolated(unsafe) public static var level:Level = .info
+    nonisolated(unsafe) public static var level:Level = .error
     private static func log(_ level: Level, message: String) {
         guard level.rawValue >= self.level.rawValue else { return }
         print("APP(\(level)): \(message)")
@@ -61,8 +61,9 @@ class Observer{
 }
 class Client:MQTTClient.V5,@unchecked Sendable{
     let observer = Observer()
+    let id:Identity = .init("test_test_id",password: "eyJhbGciOiJIUzI1NiJ9x57EFrgc29tksv7MJCiwD2988jzeHUenbV9LvCDogQ")
     init() {
-        super.init(.tls(host: "broker.emqx.io"))
+        super.init(.tcp(host: "broker.emqx.io"))
         MQTT.Logger.level = .debug
         self.config.keepAlive = 60
         self.config.pingTimeout = 5
@@ -75,11 +76,20 @@ class Client:MQTTClient.V5,@unchecked Sendable{
             switch reason{
             case .serverClose(let code):
                 switch code{
+                case .normal: // normal?? server never close the connection normally
+                    return false
                 case .serverBusy,.connectionRateExceeded:// don't retry when server is busy
                     return true
                 default:
                     return false
                 }
+            case .mqttError(let error):
+                if case .connectFailed(.connect(let code)) = error{
+                    if code == .notAuthorized{
+                        return true
+                    }
+                }
+                return false
             default:
                 return false
             }
@@ -94,7 +104,9 @@ class Client:MQTTClient.V5,@unchecked Sendable{
         self.addObserver(observer, for: .message, selector: #selector(Observer.recivedMessage(_:)))
         self.addObserver(observer, for: .error, selector: #selector(Observer.recivedError(_:)))
     }
-    
+    func start(){
+        self.open(id)
+    }
 }
 extension Client:MQTTDelegate{
     func mqtt(_ mqtt: MQTTClient, didUpdate status: Status, prev: Status) {
