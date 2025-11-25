@@ -30,7 +30,7 @@ import PackageDescription
 let package = Package(
     name: "YOUR_PROJECT_NAME",
     dependencies: [
-        .package(url: "https://github.com/emqx/swift-mqtt.git", from: "1.4.0"),
+        .package(url: "https://github.com/emqx/swift-mqtt.git", from: "1.5.0"),
     ]
 )
 ```
