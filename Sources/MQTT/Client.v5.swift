@@ -168,6 +168,7 @@ extension MQTTClient.V5{
     /// - Returns: `Promise<Void>` waiting on disconnect message to be sent
     ///
     @discardableResult
+    @preconcurrency
     final public func close(_ code:ResultCode.Disconnect = .normal ,properties:Properties = [])->Promise<Void>{
         self._close(code,properties: properties)
     }
