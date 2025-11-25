@@ -33,7 +33,8 @@ extension MQTTClient.V5{
     /// Depending on `QoS` setting the promise will complete  after message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are received.
     /// `QoS0` retrun nil. `QoS1` and above return an `Puback` which contains a `code` and `properties`
     @discardableResult
-    public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = [])->Promise<Puback?>{
+    @preconcurrency
+    final public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = [])->Promise<Puback?>{
         let data = payload.data(using: .utf8) ?? Data()
         return publish(to:topic, payload: data,qos: qos,retain: retain,properties: properties)
     }
@@ -50,7 +51,8 @@ extension MQTTClient.V5{
     /// Depending on `QoS` setting the promise will complete  after message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are received.
     /// `QoS0` retrun nil. `QoS1` and above return an `Puback` which contains a `code` and `properties`
     @discardableResult
-    public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<Puback?> {
+    @preconcurrency
+    final public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<Puback?> {
         let message = Message(qos: qos, dup: false, topic: topic, retain: retain, payload: payload, properties: properties)
         return self.publish(packet: PublishPacket(id: nextPacketId(), message: message))
     }
@@ -63,7 +65,8 @@ extension MQTTClient.V5{
     /// - Returns: `Promise<Suback>` waiting for subscribe to complete. Will wait for `SUBACK` message from server and
     ///     return its contents
     @discardableResult
-    public func subscribe(to topic:String,qos:MQTTQoS = .atLeastOnce,properties:Properties = [])->Promise<Suback>{
+    @preconcurrency
+    final public func subscribe(to topic:String,qos:MQTTQoS = .atLeastOnce,properties:Properties = [])->Promise<Suback>{
         return self.subscribe(to: [Subscribe(topic, qos: qos)], properties: properties)
     }
     /// Subscribe to topic
@@ -75,7 +78,8 @@ extension MQTTClient.V5{
     /// - Returns: `Promise<Suback>` waiting for subscribe to complete. Will wait for `SUBACK` message from server and
     ///     return its contents
     @discardableResult
-    public func subscribe(to subscriptions:[Subscribe],properties:Properties = [])->Promise<Suback>{
+    @preconcurrency
+    final public func subscribe(to subscriptions:[Subscribe],properties:Properties = [])->Promise<Suback>{
         let packet = SubscribePacket(id: nextPacketId(), properties: properties, subscriptions: subscriptions)
         return self.subscribe(packet: packet).then { $0.suback() }
     }
@@ -87,7 +91,8 @@ extension MQTTClient.V5{
     /// - Returns: `Promise<Unsuback>` waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
     ///     return its contents
     @discardableResult
-    public func unsubscribe(from topic:String,properties:Properties = []) -> Promise<Unsuback> {
+    @preconcurrency
+    final public func unsubscribe(from topic:String,properties:Properties = []) -> Promise<Unsuback> {
         return unsubscribe(from:[topic], properties: properties)
     }
     
@@ -98,7 +103,8 @@ extension MQTTClient.V5{
     /// - Returns: `Promise<Unsuback>` waiting for unsubscribe to complete. Will wait for `UNSUBACK` message from server and
     ///     return its contents
     @discardableResult
-    public func unsubscribe(from topics:[String],properties:Properties = []) -> Promise<Unsuback> {
+    @preconcurrency
+    final public func unsubscribe(from topics:[String],properties:Properties = []) -> Promise<Unsuback> {
         let packet = UnsubscribePacket(id: nextPacketId(), subscriptions: topics, properties: properties)
         return self.unsubscribe(packet: packet).then { $0.unsuback() }
     }
@@ -121,7 +127,8 @@ extension MQTTClient.V5{
     /// - Returns: `Promise<Connack>` to be updated with connack
     ///
     @discardableResult
-    public func open(
+    @preconcurrency
+    final public func open(
         _  identity:Identity,
         will: (topic: String, payload: Data, retain: Bool, properties: Properties)? = nil,
         cleanStart: Bool = true,
@@ -161,7 +168,7 @@ extension MQTTClient.V5{
     /// - Returns: `Promise<Void>` waiting on disconnect message to be sent
     ///
     @discardableResult
-    public func close(_ code:ResultCode.Disconnect = .normal ,properties:Properties = [])->Promise<Void>{
+    final public func close(_ code:ResultCode.Disconnect = .normal ,properties:Properties = [])->Promise<Void>{
         self._close(code,properties: properties)
     }
     /// Re-authenticate with server
@@ -172,7 +179,8 @@ extension MQTTClient.V5{
     /// - Returns: `Promise<Auth>` final auth packet returned from server
     ///
     @discardableResult
-    public func auth(_ properties: Properties, authflow: Authflow? = nil) -> Promise<Auth> {
+    @preconcurrency
+    final public func auth(_ properties: Properties, authflow: Authflow? = nil) -> Promise<Auth> {
         self.auth(properties: properties, authflow: authflow)
     }
 }

@@ -2,8 +2,12 @@ import XCTest
 import Network
 
 @testable import MQTT
-
+struct TestSafely:Sendable{
+    var a:Int
+    var b:String
+}
 final class mqttTests: XCTestCase {
+    @Safely var t:TestSafely = .init(a: 0, b: "")
     var id:Identity{
         Identity("swift-mqtt-\(UInt.random(in:1..<10000))",username: "test",password: "test")
     }
@@ -55,5 +59,19 @@ final class mqttTests: XCTestCase {
         }
         MQTT.Logger.level = .debug
         return m
+    }
+    func testSafely(){
+        let group = DispatchGroup()
+        for _ in 0..<100{
+            group.enter()
+            DispatchQueue.global().async {
+                group.leave()
+                self.$t.write { t in
+                    t.a += 1
+                }
+            }
+        }
+        group.wait()
+        XCTAssert(self.t.a == 100)
     }
 }

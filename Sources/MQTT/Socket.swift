@@ -12,7 +12,7 @@ protocol SocketDelegate:AnyObject{
     func socket(_ socket:Socket,didReceive error:Error)
     func socket(_ socket:Socket,didReceive packet:Packet)
 }
-class Socket:@unchecked Sendable{
+final class Socket:@unchecked Sendable{
     private let queue = DispatchQueue(label: "mqtt.socket.queue")
     private let config:Config
     private var header:UInt8 = 0
@@ -35,17 +35,21 @@ class Socket:@unchecked Sendable{
         }
     }
     func start(){
-        if let _ = conn?.queue{ return }
-        let params = endpoint.params(config: config)
-        conn = NWConnection.init(to: params.0, using: params.1)
-        conn?.stateUpdateHandler = {[weak self] state in
-            self?.handle(state: state)
-        }
-        conn?.start(queue: queue)
-        if isws{
-            readMessage()
-        }else{
-            readHeader()
+        if self.$conn.write({ conn in
+            if let _ = conn?.queue{ return false }
+            let params = endpoint.params(config: config)
+            conn = NWConnection.init(to: params.0, using: params.1)
+            conn?.stateUpdateHandler = {[weak self] state in
+                self?.handle(state: state)
+            }
+            conn?.start(queue: queue)
+            return true
+        }){
+            if isws{
+                readMessage()
+            }else{
+                readHeader()
+            }
         }
     }
     func send(data:Data)->Promise<Void>{
