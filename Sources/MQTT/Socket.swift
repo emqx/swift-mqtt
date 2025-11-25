@@ -69,13 +69,13 @@ final class Socket:@unchecked Sendable{
     private func handle(state:NWConnection.State){
         switch state{
         case .cancelled:
-            // This is the network telling us we're closed.
-            // We don't need to actually do anything here
+            // This is the network telling us we're closed. We don't need to actually do anything here
             break
         case .failed(let error):
             // The connection has failed for some reason.
             self.delegate?.socket(self, didReceive: error)
         case .ready:
+            // Ok connection is ready. But we don't need to do anything at all.
             break
         case .preparing:
             // This just means connections are being actively established. We have no specific action here.
@@ -84,11 +84,10 @@ final class Socket:@unchecked Sendable{
             //
             break
         case .waiting(let error):
-            //Perhaps nothing will happen, but here we can safely treat this as an error and there is no harm in doing so.
+            // Perhaps nothing will happen, but here we can safely treat this as an error and there is no harm in doing so.
             self.delegate?.socket(self, didReceive: error)
         default:
-            // This clause is here to help the compiler out: it's otherwise not able to
-            // actually validate that the switch is exhaustive. Trust me, it is.
+            // Never happen
             break
         }
     }

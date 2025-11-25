@@ -18,7 +18,9 @@ public struct Endpoint:Sendable{
     public let opt:NWProtocolOptions
     public let tls:TLSOptions? //tls quic
     public let headers:WSHeaders?// ws wss
+    
     /// Create a `WebSocket`protocol endpoint
+    ///
     /// - Parameters:
     ///    - host: The host ip or domain
     ///    - port: The server listen port
@@ -36,7 +38,9 @@ public struct Endpoint:Sendable{
         let nw = NWEndpoint.url(URL(string: "ws://\(host):\(port)\(path)")!)//if url is nil, crash is better
         return .init(type: .ws,nw: nw,opt: opt,tls: nil,headers:headers)
     }
+    
     /// Create a `WebSocket`protocol endpoint
+    ///
     /// - Parameters:
     ///    - host: The host ip or domain
     ///    - port: The server listen port
@@ -56,7 +60,9 @@ public struct Endpoint:Sendable{
         let nw = NWEndpoint.url(URL(string: "wss://\(host):\(port)\(path)")!)//if url is nil, crash is better
         return .init(type: .wss,nw: nw,opt: opt,tls: tls,headers: headers)
     }
+    
     /// Create a `TCP`protocol endpoint
+    ///
     /// - Parameters:
     ///    - host: The host ip or domain
     ///    - port: The server listen port
@@ -70,7 +76,9 @@ public struct Endpoint:Sendable{
         let nw = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
         return .init(type: .tcp,nw: nw,opt: opt,tls: nil,headers: nil)
     }
+    
     /// Create a `TCP`protocol endpoint using `TLS`
+    /// 
     /// - Parameters:
     ///    - host: The host ip or domain
     ///    - port: The server listen port
@@ -86,7 +94,9 @@ public struct Endpoint:Sendable{
         let nw = NWEndpoint.hostPort(host: .init(host), port: .init(rawValue: port)!)
         return .init(type: .tls,nw: nw,opt: opt,tls: tls,headers: nil)
     }
+    
     /// Create a `QUIC`protocol endpoint
+    ///
     /// - Parameters:
     ///    - host: The host ip or domain
     ///    - port: The server listen port
@@ -168,18 +178,17 @@ public struct TLSOptions:Sendable{
     public var trust:ServerTrust?
     /// Use to client certificateertificate  challenge
     public var credential: Credential?
-    /// the server name if need just like the host in http.
-    /// may be use to server trust
+    /// The server name if need just like the host in http. may be use to server trust
     public var serverName:String?
-    /// min tls version
+    /// Min tls version
     public var minVersion:Version?
-    /// max tls version
+    /// Max tls version
     public var maxVersion:Version?
-    /// session tickets enable
+    /// Session tickets enable
     public var ticketsEnable:Bool?
-    /// false start enable
+    /// False start enable
     public var falseStartEnable:Bool?
-    /// resumption enable
+    /// Resumption enable
     public var resumptionEnabled:Bool?
     
     public init(trust: ServerTrust? = nil, credential: Credential? = nil, serverName: String? = nil, minVersion: Version? = nil, maxVersion: Version? = nil, sctEnable: Bool? = nil, ocspEnable: Bool? = nil, ticketsEnable: Bool? = nil, falseStartEnable: Bool? = nil, resumptionEnabled: Bool? = nil, renegotiationEnable: Bool? = nil) {
@@ -260,14 +269,14 @@ extension TLSOptions{
     }
     /// Server Trust
     public enum ServerTrust:@unchecked Sendable{
-        /// trust all means not verify
+        /// Trust all means not verify
         /// - Important: This setting is not secure and is usually only used as a test during the development phase
         case trustAll
-        /// verify the self-signed root certificate
+        /// Verify the self-signed root certificate
         case trustRoots([SecCertificate])
-        /// custom verify logic
+        /// Custom verify logic
         case trustBlock(@Sendable (SecTrust)->Bool)
-        /// load certificate from file
+        /// Load certificate from file
         public static func trust(der filePath:String)throws -> Self{
             let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
             if let cert = SecCertificateCreateWithData(nil, data as CFData) {
@@ -279,12 +288,12 @@ extension TLSOptions{
     public struct Credential:@unchecked Sendable{
         public let id:SecIdentity
         public let certs:[SecCertificate]
-        /// create from p12 filePath
+        /// Create from p12 filePath
         public static func create(from filePath:String,passwd:String)throws->Self{
             let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
             return try create(from: data, passwd: passwd)
         }
-        /// create from p12 data
+        /// Create from p12 data
         public static func create(from data:Data,passwd:String)throws ->Self{
             let options = [kSecImportExportPassphrase as String: passwd]
             var rawItems: CFArray?

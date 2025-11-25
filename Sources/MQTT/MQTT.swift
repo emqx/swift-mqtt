@@ -63,7 +63,7 @@ public final class Config:@unchecked Sendable{
             assert(keepAlive>0, "keepalive must be greater than zero!")
         }
     }
-    /// enable `keepAlive`
+    /// Enable `keepAlive`
     /// - Note:Please set this value before client open, otherwise it will take effect on the next open
     public var pingEnabled: Bool = true
     /// The socket will auto reconnect when ping timeout
@@ -73,7 +73,7 @@ public final class Config:@unchecked Sendable{
             assert(pingTimeout>0, "pingTimeout must be greater than zero!")
         }
     }
-    /// timeout second  for connecting to server
+    /// Timeout second  for connecting to server
     /// - Important: This setting does not take effect in the quic protocol. In the quic protocol is fixed at 30s and cannot be modified
     /// - Note:Please set this value before client open, otherwise it will take effect on the next open
     public var connectTimeout: TimeInterval = 30{
@@ -81,7 +81,7 @@ public final class Config:@unchecked Sendable{
             assert(connectTimeout>0, "connectTimeout must be greater than zero!")
         }
     }
-    /// timeout second  for pubulish  flow acks
+    /// Timeout second  for pubulish  flow.
     /// - Note:Please set this value before client open, otherwise it will take effect on the next open
     public var publishTimeout: TimeInterval = 5{
         didSet{
