@@ -51,11 +51,13 @@ public enum Version:Sendable{
         }
     }
 }
+/// - Note:We do not consider the data race of Config. because all configurations need to be set before Client.open.
+/// Otherwise it will take effect on the next open
 public final class Config:@unchecked Sendable{
     /// protocol version init in client
     public let version:Version
     /// MQTT keep alive period in second.
-    /// It will take effect immediately
+    /// - Note:Please set this value before client open, otherwise it will take effect on the next open
     public var keepAlive: UInt16 = 60{
         didSet{
             assert(keepAlive>0, "keepalive must be greater than zero!")
@@ -64,8 +66,8 @@ public final class Config:@unchecked Sendable{
     /// enable `keepAlive`
     /// - Note:Please set this value before client open, otherwise it will take effect on the next open
     public var pingEnabled: Bool = true
-    /// It will take effect at next ping request.
     /// The socket will auto reconnect when ping timeout
+    /// - Note:Please set this value before client open, otherwise it will take effect on the next open
     public var pingTimeout: TimeInterval = 5{
         didSet{
             assert(pingTimeout>0, "pingTimeout must be greater than zero!")
@@ -80,7 +82,7 @@ public final class Config:@unchecked Sendable{
         }
     }
     /// timeout second  for pubulish  flow acks
-    /// It will take effect immediately
+    /// - Note:Please set this value before client open, otherwise it will take effect on the next open
     public var publishTimeout: TimeInterval = 5{
         didSet{
             assert(publishTimeout>0, "publishTimeout must be greater than zero!")
@@ -93,7 +95,7 @@ public final class Config:@unchecked Sendable{
 
 class MQTTTask:@unchecked Sendable{
     private let promise:Promise<Packet>
-    private var item:DispatchWorkItem?
+    @Safely private var item:DispatchWorkItem?
     init(){
         self.promise = .init()
     }

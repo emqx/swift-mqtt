@@ -105,7 +105,7 @@ class Client:MQTTClient.V5,@unchecked Sendable{
         self.addObserver(observer, for: .error, selector: #selector(Observer.recivedError(_:)))
     }
     func start(){
-        self.open(id)
+        self.open(id,cleanStart: false)
     }
 }
 extension Client:MQTTDelegate{

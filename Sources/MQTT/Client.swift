@@ -8,7 +8,7 @@
 import Foundation
 import Network
 
-public struct Identity{
+public struct Identity:Sendable{
     /// MQTT client id it will be send in `CONNECT` Packet
     public internal(set) var clientId:String
     /// MQTT client username it will be send in `CONNECT` Packet
@@ -31,7 +31,8 @@ public protocol MQTTDelegate:AnyObject,Sendable{
     func mqtt(_ mqtt: MQTTClient, didReceive error:Error)
 }
 open class MQTTClient:@unchecked Sendable{
-    ///client config
+    ///client configuration
+    /// - Note: It not thread safe. please config it before client working
     public let config:Config
     /// readonly mqtt client connection status
     /// mqtt client version
@@ -40,32 +41,35 @@ open class MQTTClient:@unchecked Sendable{
     public var isOpened:Bool { status == .opened }
     /// network endpoint
     public let endpoint:Endpoint
+    /// message delegate
+    /// - Note: It not thread safe. please config it before client working
+    public weak var delegate:MQTTDelegate?
     /// current mqtt client identity . It  will be set affter `client.open(_ identity:)`
     public internal(set)var identity:Identity?
     /// The delegate and observers callback queue
-    /// By default use internal socket queue.  change it for custom
+    /// By default use internal task queue.  change it for custom
+    /// - Note: It not thread safe. please config it before client working
     public var delegateQueue:DispatchQueue
-    /// message delegate
-    public weak var delegate:MQTTDelegate?
-    /// auto create  when some observer has been added
-    private var notify:NotificationCenter?
-    /// internal network process queue
+    //--- private zone
+    /// internal async task process queue
     private let queue:DispatchQueue
+    /// internal socket instance
+    private let socket:Socket
     //--- Keep safely by sharing a same status lock ---
     private let safe = Safely()//status safe lock
-    private let socket:Socket
-    private var pinging:Pinging?
-    private var retrier:Retrier?//not nil after startRetrier
-    private var monitor:Monitor?//not nil after startMonitor
     private var retrying:Bool = false
     private var authflow:Authflow?
     private var connPacket:ConnectPacket?
     private var connParams:ConnectParams = .init()
     //--- Keep safely themself ---
-    @Safely private var packetId:UInt16 = 0
-    @Safely private var connTask:MQTTTask?
-    @Safely private var authTask:MQTTTask?
-    @Safely private var pingTask:MQTTTask?
+    @Safely private var notify:NotificationCenter?//it will auto create when some observer has been added
+    @Safely private var pinging:Pinging?//not nil after client become opened. Of course,the config.pingEnable must be true.
+    @Safely private var retrier:Retrier?//not nil after startRetrier.
+    @Safely private var monitor:Monitor?//not nil after startMonitor.
+    @Safely private var packetId:UInt16 = 0//auto-increment safely
+    @Safely private var connTask:MQTTTask?//current connection task
+    @Safely private var authTask:MQTTTask?//current auth task
+    @Safely private var pingTask:MQTTTask?//current pinging task
     @Safely private var inflight:[UInt16:Packet] = [:]// inflight messages
     @Safely private var activeTasks:[UInt16:MQTTTask] = [:] // active workflow tasks
     @Safely private var passiveTasks:[UInt16:MQTTTask] = [:] // passive workflow tasks
@@ -273,24 +277,29 @@ extension MQTTClient{
 // MARK: Ping Pong  Retry Monitor
 extension MQTTClient{
     func setMonitor(_ enable:Bool){
-        guard enable else{
-            self.monitor?.stop()
-            self.monitor = nil
-            return
-        }
-        let monitor = self.monitor ?? Monitor{[weak self] new in
-            guard let self else { return }
-            switch new{
-            case .satisfied:
-                self.monitorConnect()
-            case .unsatisfied:
-                self.status = .closed(.unsatisfied)
-            default:
-                break
+        self.$monitor.write { monitor in
+            if !enable {
+                if monitor != nil{
+                    monitor?.stop()
+                    monitor = nil
+                }
+                return
             }
+            if monitor == nil{
+                monitor = Monitor{[weak self] new in
+                    guard let self else { return }
+                    switch new{
+                    case .satisfied:
+                        self.monitorConnect()
+                    case .unsatisfied:
+                        self.status = .closed(.unsatisfied)
+                    default:
+                        break
+                    }
+                }
+            }
+            monitor?.start()
         }
-        monitor.start()
-        self.monitor = monitor
     }
     private func monitorConnect(){
         safe.lock(); defer{ safe.unlock() }
@@ -804,7 +813,7 @@ extension MQTTClient {
     }
 }
 /// connection parameters. Limits set by either client or server
-struct ConnectParams{
+struct ConnectParams:Sendable{
     var maxQoS: MQTTQoS = .exactlyOnce
     var maxPacketSize: Int?
     var retainAvailable: Bool = true

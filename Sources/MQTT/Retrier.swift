@@ -93,7 +93,7 @@ final class Monitor:@unchecked Sendable{
             self.status = newPath.status
         }
     }
-    var status:NWPath.Status = .unsatisfied{
+    private(set) var status:NWPath.Status = .unsatisfied{
         didSet{
             if status == oldValue{ return }
             self.onChange?(status)
@@ -111,34 +111,38 @@ final class Monitor:@unchecked Sendable{
 final class Pinging:@unchecked Sendable{
     private let queue:DispatchQueue = .init(label: "mqtt.pingpong.queue")
     private let interval:TimeInterval
-    private var execTime:DispatchTime
-    private var worker:DispatchWorkItem?
     private weak var client:MQTTClient?
+    @Safely private var execTime:DispatchTime
+    private let lock = Safely()
+    private var worker:DispatchWorkItem?
     init(client:MQTTClient){
         execTime = .now()
         interval = TimeInterval(client.config.keepAlive)
         self.client = client
     }
     func start(){
-        guard self.worker == nil else{ return }
-        self.execTime = .now()
-        self.schedule()
+        lock.lock(); defer { lock.unlock() }
+        if worker != nil { return }
+        execTime = .now()
+        worker = genWorker()
+        queue.asyncAfter(deadline: execTime + interval, execute: worker!)
     }
     func stop(){
-        if self.worker != nil{
-            self.worker?.cancel()
-            self.worker = nil
+        lock.lock();defer { lock.unlock() }
+        if worker != nil{
+            worker?.cancel()
+            worker = nil
         }
     }
     func update(){
-        self.execTime = .now()
+        execTime = .now()
     }
-    private func schedule(){
-        let worker = DispatchWorkItem{[weak self] in
+    private func genWorker()->DispatchWorkItem{
+        DispatchWorkItem{[weak self] in
             guard let self else{ return }
             guard let client = self.client else{ return }
             guard self.execTime+self.interval <= .now() else{
-                self.schedule()
+                self.next()
                 return
             }
             client.ping().finally{result in
@@ -146,9 +150,12 @@ final class Pinging:@unchecked Sendable{
                     client.pingTimeout()
                 }
             }
-            self.schedule()
+            self.next()
         }
-        self.worker = worker
-        queue.asyncAfter(deadline: execTime + interval, execute: worker)
+    }
+    private func next(){
+        lock.lock();defer { lock.unlock() }
+        worker = genWorker()
+        queue.asyncAfter(deadline: execTime + interval, execute: worker!)
     }
 }

@@ -25,7 +25,8 @@ extension MQTTClient.V3{
     ///   - code: close reason code send to the server
     /// - Returns: `Promise` waiting on disconnect message to be sent
     @discardableResult
-    public func close(_ code:ResultCode.Disconnect = .normal)->Promise<Void>{
+    @preconcurrency
+    final public func close(_ code:ResultCode.Disconnect = .normal)->Promise<Void>{
         self._close(code,properties: [])
     }
     /// Connect to MQTT server
@@ -43,7 +44,8 @@ extension MQTTClient.V3{
     /// - Returns: `Promise<Bool>` to be updated with whether server holds a session for this client
     ///
     @discardableResult
-    public func open(_ identity:Identity,will: (topic: String, payload: Data, retain: Bool)? = nil, cleanStart: Bool = true ) -> Promise<Bool> {
+    @preconcurrency
+    final public func open(_ identity:Identity,will: (topic: String, payload: Data, retain: Bool)? = nil, cleanStart: Bool = true ) -> Promise<Bool> {
         let message = will.map {
             Message(
                 qos: .atMostOnce,
@@ -79,7 +81,8 @@ extension MQTTClient.V3{
     /// - Returns: `Promise<Void>` waiting for publish to complete.
     ///
     @discardableResult
-    public func publish(
+    @preconcurrency
+    final public func publish(
         to topic: String,
         payload: Data,
         qos: MQTTQoS  = .atLeastOnce,
@@ -100,7 +103,8 @@ extension MQTTClient.V3{
     /// - Returns: `Promise<Void>` waiting for publish to complete.
     ///
     @discardableResult
-    public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false)->Promise<Void>{
+    @preconcurrency
+    final public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false)->Promise<Void>{
         let data = payload.data(using: .utf8) ?? Data()
         return publish(to:topic, payload: data,qos: qos,retain: retain)
     }
@@ -109,7 +113,8 @@ extension MQTTClient.V3{
     /// - Returns: `Promise<Suback>` waiting for subscribe to complete. Will wait for SUBACK message from server
     ///
     @discardableResult
-    public func subscribe(to topic: String,qos:MQTTQoS = .atLeastOnce) -> Promise<Suback> {
+    @preconcurrency
+    final public func subscribe(to topic: String,qos:MQTTQoS = .atLeastOnce) -> Promise<Suback> {
         let packet = SubscribePacket(id: nextPacketId(), properties: [],subscriptions: [.init(topic, qos: qos)])
         return self.subscribe(packet: packet).then { $0.suback() }
     }
@@ -118,7 +123,8 @@ extension MQTTClient.V3{
     /// - Returns: `Promise<Suback>` waiting for subscribe to complete. Will wait for SUBACK message from server
     ///
     @discardableResult
-    public func subscribe(to subscriptions: [Subscribe.V3]) -> Promise<Suback> {
+    @preconcurrency
+    final public func subscribe(to subscriptions: [Subscribe.V3]) -> Promise<Suback> {
         let subscriptions: [Subscribe] = subscriptions.map { .init($0.topic, qos: $0.qos) }
         let packet = SubscribePacket(id: nextPacketId(), properties: [],subscriptions: subscriptions)
         return self.subscribe(packet: packet).then { $0.suback() }
@@ -128,7 +134,8 @@ extension MQTTClient.V3{
     /// - Returns: `Promise<Void>` waiting for unsubscribe to complete. Will wait for UNSUBACK message from server
     ///
     @discardableResult
-    public func unsubscribe(from topic: String) -> Promise<Void> {
+    @preconcurrency
+    final public func unsubscribe(from topic: String) -> Promise<Void> {
         return unsubscribe(from: [topic])
     }
     /// Unsubscribe from topic
@@ -136,7 +143,8 @@ extension MQTTClient.V3{
     /// - Returns: `Promise` waiting for unsubscribe to complete. Will wait for UNSUBACK message from server
     ///
     @discardableResult
-    public func unsubscribe(from subscriptions: [String]) -> Promise<Void> {
+    @preconcurrency
+    final public func unsubscribe(from subscriptions: [String]) -> Promise<Void> {
         let packet = UnsubscribePacket(id: nextPacketId(),subscriptions: subscriptions, properties: [])
         return self.unsubscribe(packet: packet).then { _ in }
     }
