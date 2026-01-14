@@ -32,6 +32,7 @@ extension MQTTClient.V5{
     /// - Returns: `Promise<Puback?>` waiting for publish to complete.
     /// Depending on `QoS` setting the promise will complete  after message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are received.
     /// `QoS0` retrun nil. `QoS1` and above return an `Puback` which contains a `code` and `properties`
+    /// - Note: When the QOS value is greater than 0, the message will keep retrying until it succeeds or stops retrying. Only then will the promise be done.
     @discardableResult
     @preconcurrency
     final public func publish(to topic:String,payload:String,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = [])->Promise<Puback?>{
@@ -50,6 +51,7 @@ extension MQTTClient.V5{
     /// - Returns: `Promise<Puback?>` waiting for publish to complete.
     /// Depending on `QoS` setting the promise will complete  after message is sent, when `PUBACK` is received or when `PUBREC` and following `PUBCOMP` are received.
     /// `QoS0` retrun nil. `QoS1` and above return an `Puback` which contains a `code` and `properties`
+    /// - Note: When the QOS value is greater than 0, the message will keep retrying until it succeeds or stops retrying. Only then will the `promise` be done.
     @discardableResult
     @preconcurrency
     final public func publish(to topic:String,payload:Data,qos:MQTTQoS = .atLeastOnce, retain:Bool = false,properties:Properties = []) ->Promise<Puback?> {

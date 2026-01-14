@@ -779,10 +779,11 @@ extension MQTTClient {
         }.catch { error in
             if case MQTTError.serverClose(let ack) = error, ack == .malformedPacket{
                 self.$inflight.remove(id: packet.id)
+                throw error
             }
             if case MQTTError.timeout = error{
                 //Always try again when timeout
-                return self.senPublish(packet:packet)
+                return self.senPublish(packet:PublishPacket(id: packet.id, message: packet.message.duplicate()))
             }
             throw error
         }
