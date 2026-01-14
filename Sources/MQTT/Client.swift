@@ -372,16 +372,34 @@ extension MQTTClient{
         case .CONNACK,.SUBACK,.UNSUBACK,.PINGRESP: ///client never send them
             break
         }
+        var buffer = DataBuffer()
         do {
-            Logger.debug("SEND: \(packet)")
-            var buffer = DataBuffer()
             try packet.write(version: config.version, to: &buffer)
-            self.pinging?.update()
-            return socket.send(data: buffer.data).then { _ in
-                return task.start(in: self.queue,timeout:timeout)
-            }
         } catch {
             return .init(error)
+        }
+        self.pinging?.update()
+        Logger.debug("SEND: \(packet)")
+        return socket.send(data: buffer.data).then { _ in
+            return task.start(in: self.queue,timeout:timeout).catch { error in
+                if case MQTTError.timeout = error{
+                    switch packet.type{
+                    case .AUTH:
+                        self.authTask = nil
+                    case .CONNECT:
+                        self.connTask = nil
+                    case .PINGREQ:
+                        self.pingTask = nil
+                    case .PUBREC:
+                        self.passiveTasks[packet.id] = nil
+                    case .PUBLISH,.PUBREL,.SUBSCRIBE,.UNSUBSCRIBE:
+                        self.activeTasks[packet.id] = nil
+                    default:
+                        break
+                    }
+                }
+                throw error
+            }
         }
     }
 }
